@@ -44,16 +44,6 @@ func (canvas Canvas) Layout(gtx layout.Context, children ...CanvasItem) layout.D
 	for i, c := range children {
 		cgtx.Constraints.Min = image.Point{}
 
-		switch c.Anchor {
-		case layout.N, layout.S:
-			cgtx.Constraints.Min.X = maxSize.X
-		case layout.E, layout.W:
-			cgtx.Constraints.Min.Y = maxSize.Y
-		case layout.Center:
-			cgtx.Constraints.Min = maxSize
-		default:
-		}
-
 		macro := op.Record(gtx.Ops)
 		dims := c.Widget(cgtx)
 		call := macro.Stop()
@@ -145,29 +135,29 @@ func (canvas Canvas) Layout(gtx layout.Context, children ...CanvasItem) layout.D
 		case layout.NW:
 			offset = c.Offset
 		case layout.N:
-			offset.X = maxSize.X/2 - c.dims.Size.X/2
+			offset.X = maxSize.X/2 - c.dims.Size.X/2 + c.Offset.X
 			offset.Y = c.Offset.Y
 		case layout.NE:
 			offset.X = maxSize.X - c.dims.Size.X + c.Offset.X
 			offset.Y = c.Offset.Y
 		case layout.E:
 			offset.X = maxSize.X - c.dims.Size.X + c.Offset.X
-			offset.Y = maxSize.Y/2 - c.dims.Size.Y/2
+			offset.Y = maxSize.Y/2 - c.dims.Size.Y/2 + c.Offset.Y
 		case layout.SE:
 			offset.X = maxSize.X - c.dims.Size.X + c.Offset.X
 			offset.Y = maxSize.Y - c.dims.Size.Y + c.Offset.Y
 		case layout.S:
-			offset.X = maxSize.X/2 - c.dims.Size.X/2
+			offset.X = maxSize.X/2 - c.dims.Size.X/2 + c.Offset.Y
 			offset.Y = maxSize.Y - c.dims.Size.Y + c.Offset.Y
 		case layout.SW:
 			offset.X = c.Offset.X
 			offset.Y = maxSize.Y - c.dims.Size.Y + c.Offset.Y
 		case layout.W:
 			offset.X = c.Offset.X
-			offset.Y = maxSize.Y/2 - c.dims.Size.Y/2
+			offset.Y = maxSize.Y/2 - c.dims.Size.Y/2 + c.Offset.Y
 		case layout.Center:
-			offset.X = maxSize.X/2 - c.dims.Size.X/2
-			offset.Y = maxSize.Y/2 - c.dims.Size.Y/2
+			offset.X = maxSize.X/2 - c.dims.Size.X/2 + c.Offset.X
+			offset.Y = maxSize.Y/2 - c.dims.Size.Y/2 + c.Offset.Y
 		}
 
 		trans := op.Offset(offset).Push(gtx.Ops)

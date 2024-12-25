@@ -99,24 +99,24 @@ func (event *SkillUse) String() string {
 	}
 }
 
-func (event *Vitals) String() string {
+func (event Vitals) String() string {
 	return utils.FormatDamageLabel(event.Health, event.Armor, event.Power)
 }
-func (event *Vitals) Add(other *Vitals) *Vitals {
-	return &Vitals{
+func (event Vitals) Add(other Vitals) Vitals {
+	return Vitals{
 		Health: event.Health + other.Health,
 		Armor:  event.Armor + other.Armor,
 		Power:  event.Power + other.Power,
 	}
 }
-func (event *Vitals) Abs() *Vitals {
-	return &Vitals{
+func (event Vitals) Abs() Vitals {
+	return Vitals{
 		Health: utils.AbsInt(event.Health),
 		Armor:  utils.AbsInt(event.Armor),
 		Power:  utils.AbsInt(event.Power),
 	}
 }
-func (event *Vitals) Total() int {
+func (event Vitals) Total() int {
 	return event.Health + event.Armor + event.Power
 }
 

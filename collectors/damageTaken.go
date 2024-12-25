@@ -16,7 +16,7 @@ import (
 type enemyDamage struct {
 	name   string
 	amount int
-	damage *abstract.Vitals
+	damage abstract.Vitals
 }
 
 func NewDamageTakenCollector() *DamageTakenCollector {
@@ -59,12 +59,12 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 			return &enemyDamage{
 				name:   skillUse.Subject,
 				amount: 1,
-				damage: skillUse.Damage,
+				damage: *skillUse.Damage,
 			}
 		},
 		func(counter *enemyDamage) *enemyDamage {
 			counter.amount++
-			counter.damage = counter.damage.Add(skillUse.Damage)
+			counter.damage = counter.damage.Add(*skillUse.Damage)
 
 			return counter
 		},
@@ -83,12 +83,12 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 			return &enemyDamage{
 				name:   SplitOffId(skillUse.Subject),
 				amount: 1,
-				damage: skillUse.Damage,
+				damage: *skillUse.Damage,
 			}
 		},
 		func(counter *enemyDamage) *enemyDamage {
 			counter.amount++
-			counter.damage = counter.damage.Add(skillUse.Damage)
+			counter.damage = counter.damage.Add(*skillUse.Damage)
 
 			return counter
 		},
@@ -178,26 +178,27 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) []layout.Widget {
 						Widget: components.BarWidget(components.StringToColor(enemy.name), 40, progress),
 					},
 					components.CanvasItem{
+						Anchor: layout.W,
 						Offset: image.Point{
-							X: gtx.Dp(5),
-							Y: gtx.Dp(5),
+							X: gtx.Dp(utils.CommonSpacing),
+							Y: gtx.Dp(-2.5),
 						},
-						Widget: material.Label(state.Theme(), 12, enemy.name).Layout,
+						Widget: func(gtx layout.Context) layout.Dimensions {
+							return layout.Flex{
+								Axis: layout.Vertical,
+							}.Layout(
+								gtx,
+								layout.Rigid(material.Label(state.Theme(), 12, enemy.name).Layout),
+								layout.Rigid(material.Label(state.Theme(), 12, fmt.Sprintf("attacked %v times",
+									enemy.amount)).Layout),
+							)
+						},
 					},
 					components.CanvasItem{
-						Anchor: layout.SW,
+						Anchor: layout.E,
 						Offset: image.Point{
-							X: gtx.Dp(5),
-							Y: gtx.Dp(-5 - utils.CommonSpacing),
-						},
-						Widget: material.Label(state.Theme(), 12, fmt.Sprintf("attacked %v times",
-							enemy.amount)).Layout,
-					},
-					components.CanvasItem{
-						Anchor: layout.NE,
-						Offset: image.Point{
-							X: gtx.Dp(-5),
-							Y: gtx.Dp(12.5),
+							X: gtx.Dp(-utils.CommonSpacing),
+							Y: gtx.Dp(-2.5),
 						},
 						Widget: material.Label(state.Theme(), 12, enemy.damage.String()).Layout,
 					},
