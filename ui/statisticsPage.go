@@ -2,6 +2,8 @@ package ui
 
 import (
 	"PGCombatTracker/abstract"
+	"PGCombatTracker/ui/components"
+	"PGCombatTracker/utils"
 	"gioui.org/app"
 	"gioui.org/io/system"
 	"gioui.org/layout"
@@ -18,6 +20,7 @@ type StatisticsPage struct {
 	currentCollector int
 
 	// UI garbage
+	modalLayer          *components.ModalLayer
 	backIcon            *widget.Icon
 	backButton          *widget.Clickable
 	resetIcon           *widget.Icon
@@ -75,6 +78,7 @@ func NewStatisticsPage(state abstract.GlobalState) (*StatisticsPage, error) {
 	}
 
 	return &StatisticsPage{
+		modalLayer:  components.NewModalLayer(),
 		backIcon:    backIcon,
 		backButton:  &widget.Clickable{},
 		resetIcon:   resetIcon,
@@ -120,7 +124,7 @@ func windowDragArea(draggable bool) layout.Widget {
 			system.ActionInputOp(system.ActionMove).Add(gtx.Ops)
 		}
 
-		paint.NewImageOp(CheckerImage{Size: size}).Add(gtx.Ops)
+		paint.NewImageOp(utils.CheckerImage{Size: size}).Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 
 		return layout.Dimensions{
@@ -147,17 +151,17 @@ func (s *StatisticsPage) navBar(state abstract.GlobalState) layout.Widget {
 
 		return layout.Background{}.Layout(
 			gtx,
-			MakeColoredAndOptionalDragBG(abstract.SecondBG, state.CanBeDragged()),
+			utils.MakeColoredAndOptionalDragBG(utils.SecondBG, state.CanBeDragged()),
 			func(gtx layout.Context) layout.Dimensions {
-				return LayoutDefinedHeight(gtx, gtx.Dp(40), func(gtx layout.Context) layout.Dimensions {
+				return utils.LayoutDefinedHeight(gtx, gtx.Dp(40), func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{
 						Axis: layout.Horizontal,
 					}.Layout(
 						gtx,
 						layout.Rigid(navIconButton(state, s.backButton, s.backIcon, "Back").Layout),
-						FlexSpacerW(abstract.CommonSpacing),
+						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Rigid(navIconButton(state, s.resetButton, s.resetIcon, "Reset").Layout),
-						FlexSpacerW(abstract.CommonSpacing),
+						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							stats := state.StatisticsCollector()
 							collectors := stats.Collectors()
@@ -177,7 +181,7 @@ func (s *StatisticsPage) navBar(state abstract.GlobalState) layout.Widget {
 									style := navButton(state, button, collector.TabName())
 
 									if s.currentCollector != index {
-										style.Background = abstract.LesserContrastBg
+										style.Background = utils.LesserContrastBg
 									}
 
 									if index+1 == amount {
@@ -188,13 +192,13 @@ func (s *StatisticsPage) navBar(state abstract.GlobalState) layout.Widget {
 										}.Layout(
 											gtx,
 											layout.Rigid(style.Layout),
-											FlexSpacerW(abstract.CommonSpacing),
+											utils.FlexSpacerW(utils.CommonSpacing),
 										)
 									}
 								},
 							)
 						}),
-						FlexSpacerW(abstract.CommonSpacing),
+						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Stack{
 								Alignment: layout.Center,
@@ -226,7 +230,7 @@ func (s *StatisticsPage) navBar(state abstract.GlobalState) layout.Widget {
 }
 
 func (s *StatisticsPage) body(state abstract.GlobalState) layout.Widget {
-	return func(gtx layout.Context) layout.Dimensions {
+	return s.modalLayer.Overlay(func(gtx layout.Context) layout.Dimensions {
 		stats := state.StatisticsCollector()
 		lock := stats.Mutex()
 
@@ -239,7 +243,9 @@ func (s *StatisticsPage) body(state abstract.GlobalState) layout.Widget {
 			return layout.Dimensions{}
 		}
 
-		body := collectors[s.currentCollector].UI(state)
+		body := collectors[s.currentCollector].UI(
+			NewLayeredState(state, s.modalLayer),
+		)
 
 		return material.List(state.Theme(), s.collectorBody).Layout(
 			gtx,
@@ -248,7 +254,7 @@ func (s *StatisticsPage) body(state abstract.GlobalState) layout.Widget {
 				return body[index](gtx)
 			},
 		)
-	}
+	})
 }
 
 func (s *StatisticsPage) Layout(ctx layout.Context, state abstract.GlobalState) error {
@@ -276,7 +282,7 @@ func (s *StatisticsPage) Layout(ctx layout.Context, state abstract.GlobalState) 
 func (s *StatisticsPage) SetupWindow(state abstract.GlobalState) {
 	state.Window().Option(
 		app.Decorated(false),
-		app.MinSize(350, 300),
-		app.Size(350, 300),
+		app.MinSize(350, 350),
+		app.Size(350, 350),
 	)
 }

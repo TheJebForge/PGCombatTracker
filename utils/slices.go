@@ -8,3 +8,14 @@ func Map[T, V any](ts []T, fn func(T) V) []V {
 	}
 	return result
 }
+
+func CreateUpdate[T any](slice []T, foundFunc func(T) bool, createFunc func() T, updateFunc func(T) T) []T {
+	for i, t := range slice {
+		if foundFunc(t) {
+			slice[i] = updateFunc(t)
+			return slice
+		}
+	}
+
+	return append(slice, createFunc())
+}

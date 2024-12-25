@@ -3,6 +3,8 @@ package ui
 import (
 	"PGCombatTracker/abstract"
 	"PGCombatTracker/parser"
+	"PGCombatTracker/ui/components"
+	"PGCombatTracker/utils"
 	"bytes"
 	"encoding/json"
 	"gioui.org/app"
@@ -60,7 +62,7 @@ func saveSettings(settings *abstract.Settings) error {
 	return nil
 }
 
-func NewGlobalState(window *app.Window, initialPage abstract.Page, factory abstract.StatisticsFactory) (abstract.GlobalState, error) {
+func NewGlobalState(window *app.Window, factory abstract.StatisticsFactory) (abstract.GlobalState, error) {
 	gorgonFolder, err := parser.GetGorgonFolder()
 
 	if err != nil {
@@ -69,7 +71,7 @@ func NewGlobalState(window *app.Window, initialPage abstract.Page, factory abstr
 
 	theme := material.NewTheme()
 
-	theme.Bg = abstract.BG
+	theme.Bg = utils.BG
 	theme.Fg = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 	theme.ContrastBg = color.NRGBA{R: 100, G: 100, B: 100, A: 255}
 
@@ -87,7 +89,6 @@ func NewGlobalState(window *app.Window, initialPage abstract.Page, factory abstr
 		settings:          sett,
 		gorgonFolder:      gorgonFolder,
 		statisticsFactory: factory,
-		page:              initialPage,
 		storage:           make(map[string]any),
 		window:            window,
 		theme:             theme,
@@ -171,4 +172,23 @@ func (g *GlobalState) Theme() *material.Theme {
 func (g *GlobalState) SwitchPage(page abstract.Page) {
 	g.page = page
 	page.SetupWindow(g)
+}
+
+func NewLayeredState(state abstract.GlobalState, modalLayer *components.ModalLayer) *LayeredState {
+	// Straight up casting to global state because nothing else will be implementing this anyway
+	globalState := state.(*GlobalState)
+
+	return &LayeredState{
+		GlobalState: globalState,
+		modalLayer:  modalLayer,
+	}
+}
+
+type LayeredState struct {
+	*GlobalState
+	modalLayer *components.ModalLayer
+}
+
+func (l LayeredState) ModalLayer() *components.ModalLayer {
+	return l.modalLayer
 }

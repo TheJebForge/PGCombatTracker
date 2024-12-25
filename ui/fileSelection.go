@@ -3,6 +3,7 @@ package ui
 import (
 	"PGCombatTracker/abstract"
 	"PGCombatTracker/parser"
+	"PGCombatTracker/ui/components"
 	"PGCombatTracker/utils"
 	"fmt"
 	"gioui.org/app"
@@ -27,6 +28,9 @@ type FileSelectionPage struct {
 	watchFileCheckbox *widget.Bool
 	browseFileButton  *widget.Clickable
 	exitButton        *widget.Clickable
+
+	modalLayer *components.ModalLayer
+	dropdown   *components.Dropdown
 }
 
 func NewFileSelectionPage() *FileSelectionPage {
@@ -101,7 +105,7 @@ func (p *FileSelectionPage) Layout(ctx layout.Context, state abstract.GlobalStat
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Background{}.Layout(
 				gtx,
-				MakeColoredBG(abstract.SecondBG),
+				utils.MakeColoredBG(utils.SecondBG),
 				p.sidePanelUI(state),
 			)
 		}),
@@ -120,8 +124,8 @@ func (p *FileSelectionPage) fileListUI(state abstract.GlobalState) layout.Widget
 		}
 
 		return layout.Inset{
-			Top:  abstract.CommonSpacing,
-			Left: abstract.CommonSpacing,
+			Top:  utils.CommonSpacing,
+			Left: utils.CommonSpacing,
 		}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return material.List(state.Theme(), p.fileList).Layout(
 				gtx,
@@ -140,7 +144,7 @@ func (p *FileSelectionPage) fileListUI(state abstract.GlobalState) layout.Widget
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return button.Layout(gtx, state)
 						}),
-						FlexSpacerH(abstract.CommonSpacing),
+						utils.FlexSpacerH(utils.CommonSpacing),
 					)
 				},
 			)
@@ -150,15 +154,15 @@ func (p *FileSelectionPage) fileListUI(state abstract.GlobalState) layout.Widget
 
 func (p *FileSelectionPage) sidePanelUI(state abstract.GlobalState) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return layout.UniformInset(abstract.CommonSpacing).Layout(
+		return layout.UniformInset(utils.CommonSpacing).Layout(
 			gtx,
 			func(gtx layout.Context) layout.Dimensions {
-				return Canvas{
+				return components.Canvas{
 					ExpandVertical: true,
 					MinSize:        image.Point{X: gtx.Dp(320)},
 				}.Layout(
 					gtx,
-					CanvasItem{
+					components.CanvasItem{
 						Widget: func(gtx layout.Context) layout.Dimensions {
 							return layout.Flex{
 								Axis: layout.Vertical,
@@ -169,7 +173,7 @@ func (p *FileSelectionPage) sidePanelUI(state abstract.GlobalState) layout.Widge
 									p.watchFileCheckbox,
 									"Watch for changes in file",
 								).Layout),
-								FlexSpacerH(abstract.CommonSpacing),
+								utils.FlexSpacerH(utils.CommonSpacing),
 								layout.Rigid(material.Button(
 									state.Theme(),
 									p.browseFileButton,
@@ -178,7 +182,7 @@ func (p *FileSelectionPage) sidePanelUI(state abstract.GlobalState) layout.Widge
 							)
 						},
 					},
-					CanvasItem{
+					components.CanvasItem{
 						Anchor: layout.NE,
 						Widget: material.Button(state.Theme(), p.refreshButton, "Refresh").Layout,
 					},
@@ -210,27 +214,27 @@ func NewFileButton(fileInfo os.FileInfo) FileButton {
 func (b FileButton) Layout(gtx layout.Context, state abstract.GlobalState) layout.Dimensions {
 	return layout.Background{}.Layout(
 		gtx,
-		MakeRoundedBG(10, abstract.LessContrastBg),
+		utils.MakeRoundedBG(10, utils.LessContrastBg),
 		func(gtx layout.Context) layout.Dimensions {
 			return layout.UniformInset(10).Layout(
 				gtx,
 				func(gtx layout.Context) layout.Dimensions {
-					return Canvas{
+					return components.Canvas{
 						ExpandHorizontal: true,
 					}.Layout(
 						gtx,
-						CanvasItem{
+						components.CanvasItem{
 							Offset: image.Point{X: gtx.Dp(0), Y: gtx.Dp(0)},
 							Widget: material.Body1(state.Theme(), b.file.Name()).Layout,
 						},
-						CanvasItem{
+						components.CanvasItem{
 							Offset: image.Point{X: gtx.Dp(0), Y: gtx.Dp(20)},
-							Widget: WithColor(material.Subtitle2(
+							Widget: utils.WithColor(material.Subtitle2(
 								state.Theme(),
 								fmt.Sprintf("Modified at %v", b.file.ModTime().Format(time.DateTime)),
-							), abstract.GrayText).Layout,
+							), utils.GrayText).Layout,
 						},
-						CanvasItem{
+						components.CanvasItem{
 							Anchor: layout.E,
 							Widget: material.Button(state.Theme(), b.openButton, "Open").Layout,
 						},

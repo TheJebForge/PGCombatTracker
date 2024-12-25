@@ -1,6 +1,7 @@
 package abstract
 
 import (
+	"PGCombatTracker/ui/components"
 	"gioui.org/app"
 	"gioui.org/widget/material"
 )
@@ -22,4 +23,9 @@ type GlobalState interface {
 
 	OpenFile(path string, watch bool) bool
 	SwitchPage(page Page)
+}
+
+type LayeredState interface {
+	GlobalState
+	ModalLayer() *components.ModalLayer
 }

@@ -4,6 +4,7 @@ import (
 	"PGCombatTracker/abstract"
 	"PGCombatTracker/collectors"
 	"PGCombatTracker/ui"
+	"PGCombatTracker/utils"
 	"fmt"
 	"gioui.org/app"
 	"gioui.org/layout"
@@ -33,7 +34,6 @@ func main() {
 func run(window *app.Window) error {
 	state, err := ui.NewGlobalState(
 		window,
-		ui.NewFileSelectionPage(),
 		func(path string, watch bool) (abstract.StatisticsCollector, error) {
 			return collectors.NewStatisticsCollector(path, watch)
 		},
@@ -43,7 +43,7 @@ func run(window *app.Window) error {
 		return err
 	}
 
-	state.Page().SetupWindow(state)
+	state.SwitchPage(ui.NewFileSelectionPage())
 
 	go func() {
 		for {
@@ -71,7 +71,7 @@ func run(window *app.Window) error {
 
 			layout.Background{}.Layout(
 				gtx,
-				ui.MakeColoredAndOptionalDragBG(state.Theme().Bg, state.CanBeDragged()),
+				utils.MakeColoredAndOptionalDragBG(state.Theme().Bg, state.CanBeDragged()),
 				func(gtx layout.Context) layout.Dimensions {
 					if state.Page != nil {
 						err := state.Page().Layout(gtx, state)
