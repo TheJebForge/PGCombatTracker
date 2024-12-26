@@ -34,8 +34,8 @@ func main() {
 func run(window *app.Window) error {
 	state, err := ui.NewGlobalState(
 		window,
-		func(path string, watch bool) (abstract.StatisticsCollector, error) {
-			return collectors.NewStatisticsCollector(path, watch)
+		func(state abstract.GlobalState, path string, watch bool) (abstract.StatisticsCollector, error) {
+			return collectors.NewStatisticsCollector(state, path, watch)
 		},
 	)
 

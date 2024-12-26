@@ -65,6 +65,10 @@ type ReceivedCoins struct {
 	Coins int
 }
 
+type ErrorLine struct {
+	Message string
+}
+
 func (event *ChatEvent) String() string {
 	return fmt.Sprintf("%v %v", event.Time.Format(time.DateTime), event.Contents)
 }
@@ -148,4 +152,9 @@ func (event *FoundCoins) String() string {
 func (event *ReceivedCoins) ImplementsChatContent() {}
 func (event *ReceivedCoins) String() string {
 	return fmt.Sprintf("Received %v coins", event.Coins)
+}
+
+func (e *ErrorLine) ImplementsChatContent() {}
+func (e *ErrorLine) String() string {
+	return fmt.Sprintf("[ERROR]: %v", e.Message)
 }

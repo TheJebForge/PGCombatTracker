@@ -15,7 +15,7 @@ import (
 type Dropdown struct {
 	Title   string
 	Value   fmt.Stringer
-	Options []fmt.Stringer
+	options []fmt.Stringer
 
 	changed           bool
 	valueIndex        int
@@ -44,7 +44,7 @@ func NewDropdown(title string, first fmt.Stringer, other ...fmt.Stringer) (*Drop
 	return &Dropdown{
 		Title:   title,
 		Value:   first,
-		Options: options,
+		options: options,
 
 		button: &widget.Clickable{},
 		itemList: &widget.List{
@@ -57,6 +57,15 @@ func NewDropdown(title string, first fmt.Stringer, other ...fmt.Stringer) (*Drop
 		downIcon: downIcon,
 		upIcon:   upIcon,
 	}, nil
+}
+
+func (d *Dropdown) Options() []fmt.Stringer {
+	return d.options
+}
+
+func (d *Dropdown) SetOptions(options []fmt.Stringer) {
+	d.options = options
+	d.itemButtons = utils.MakeClickableArray(len(options))
 }
 
 type DropdownStyle struct {
@@ -147,7 +156,7 @@ func (d *Dropdown) SelectItem(index int) {
 	d.currentModalLayer = nil
 
 	d.valueIndex = index
-	d.Value = d.Options[index]
+	d.Value = d.options[index]
 	d.changed = true
 }
 
@@ -188,13 +197,13 @@ func (d DropdownStyle) ModalLayout(gtx layout.Context) layout.Dimensions {
 			layout.Rigid(utils.MakeVerticalSeparator(2, d.DialogMinWidth)),
 			utils.FlexSpacerH(utils.CommonSpacing),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				amount := len(d.dropdown.Options)
+				amount := len(d.dropdown.options)
 
 				return material.List(d.theme, d.dropdown.itemList).Layout(
 					gtx,
 					amount,
 					func(gtx layout.Context, index int) layout.Dimensions {
-						item := d.dropdown.Options[index]
+						item := d.dropdown.options[index]
 						button := d.dropdown.itemButtons[index]
 
 						if button.Clicked(gtx) {

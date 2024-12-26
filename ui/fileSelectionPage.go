@@ -11,6 +11,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"github.com/sqweek/dialog"
+	"golang.org/x/exp/shiny/materialdesign/icons"
 	"image"
 	"log"
 	"os"
@@ -28,12 +29,19 @@ type FileSelectionPage struct {
 	watchFileCheckbox *widget.Bool
 	browseFileButton  *widget.Clickable
 	exitButton        *widget.Clickable
+	settingsIcon      *widget.Icon
+	settingsButton    *widget.Clickable
 
 	modalLayer *components.ModalLayer
 	dropdown   *components.Dropdown
 }
 
 func NewFileSelectionPage() *FileSelectionPage {
+	settingsIcon, err := widget.NewIcon(icons.ActionSettings)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	return &FileSelectionPage{
 		dirty: true,
 
@@ -48,6 +56,9 @@ func NewFileSelectionPage() *FileSelectionPage {
 			Value: true,
 		},
 		browseFileButton: &widget.Clickable{},
+
+		settingsIcon:   settingsIcon,
+		settingsButton: &widget.Clickable{},
 	}
 }
 
@@ -95,6 +106,10 @@ func (p *FileSelectionPage) Layout(ctx layout.Context, state abstract.GlobalStat
 
 	if p.browseFileButton.Clicked(ctx) {
 		p.openDialog(state)
+	}
+
+	if p.settingsButton.Clicked(ctx) {
+		state.SwitchPage(NewSettingsPage())
 	}
 
 	layout.Flex{
@@ -185,6 +200,10 @@ func (p *FileSelectionPage) sidePanelUI(state abstract.GlobalState) layout.Widge
 					components.CanvasItem{
 						Anchor: layout.NE,
 						Widget: material.Button(state.Theme(), p.refreshButton, "Refresh").Layout,
+					},
+					components.CanvasItem{
+						Anchor: layout.SE,
+						Widget: material.IconButton(state.Theme(), p.settingsButton, p.settingsIcon, "Settings").Layout,
 					},
 				)
 			},

@@ -124,7 +124,7 @@ func (g *GlobalState) OpenFile(path string, watch bool) bool {
 		g.statisticsCollector = nil
 	}
 
-	stats, err := g.statisticsFactory(path, watch)
+	stats, err := g.statisticsFactory(g, path, watch)
 
 	if err != nil {
 		log.Printf("Encountered an error while trying to start collecting: %v\n", err)

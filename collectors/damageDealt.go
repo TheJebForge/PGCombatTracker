@@ -10,7 +10,9 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 	"image"
+	"log"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -21,57 +23,163 @@ type skillDamage struct {
 	lastUsed time.Time
 }
 
+type subjectiveDamageDealt struct {
+	subject        string
+	totalDamage    abstract.Vitals
+	indirectDamage abstract.Vitals
+	skillDamage    []skillDamage
+}
+
+type SubjectChoice string
+
+func (s SubjectChoice) String() string {
+	if s == "" {
+		return "All"
+	}
+	return string(s)
+}
+
 func NewDamageDealtCollector() *DamageDealtCollector {
-	return &DamageDealtCollector{}
+	subjectDropdown, err := components.NewDropdown("Subject", SubjectChoice(""))
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	return &DamageDealtCollector{
+		subjectDropdown: subjectDropdown,
+	}
 }
 
 type DamageDealtCollector struct {
-	totalDamage abstract.Vitals
-	skillDamage []*skillDamage
+	currentSubject string
+	total          subjectiveDamageDealt
+	subjects       []subjectiveDamageDealt
+
+	subjectDropdown *components.Dropdown
 }
 
-func (col *DamageDealtCollector) ingestDamage(event *abstract.ChatEvent) {
+func (col *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInformation, event *abstract.ChatEvent) {
 	skillUse := event.Contents.(*abstract.SkillUse)
+	skillName := skillUse.Skill
 
-	// Skill damage
-	col.skillDamage = utils.CreateUpdate(
-		col.skillDamage,
-		func(counter *skillDamage) bool {
-			return counter.name == skillUse.Skill
+	if info.Settings().RemoveLevelsFromSkills {
+		skillName = SplitOffId(skillName)
+	}
+
+	// Functions for dealing with skillDamage
+	findSkillDamage := func(skill skillDamage) bool {
+		return skill.name == skillName
+	}
+	createSkillDamage := func() skillDamage {
+		return skillDamage{
+			name:     skillName,
+			amount:   1,
+			damage:   *skillUse.Damage,
+			lastUsed: event.Time,
+		}
+	}
+	updateSkillDamage := func(skill skillDamage) skillDamage {
+		if skill.lastUsed != event.Time {
+			skill.amount++
+		}
+		skill.damage = skill.damage.Add(*skillUse.Damage)
+		skill.lastUsed = event.Time
+
+		return skill
+	}
+	skillDamageSort := func(a, b skillDamage) int {
+		return cmp.Compare(b.damage.Total(), a.damage.Total())
+	}
+
+	// Ingest total stuff
+	col.total.totalDamage = col.total.totalDamage.Add(*skillUse.Damage)
+	col.total.skillDamage = utils.CreateUpdate(
+		col.total.skillDamage,
+		findSkillDamage,
+		createSkillDamage,
+		updateSkillDamage,
+	)
+
+	slices.SortFunc(col.total.skillDamage, skillDamageSort)
+
+	// Ingest individual stuff
+	col.subjects = utils.CreateUpdate(
+		col.subjects,
+		func(subject subjectiveDamageDealt) bool {
+			return subject.subject == skillUse.Subject
 		},
-		func() *skillDamage {
-			return &skillDamage{
-				name:     skillUse.Skill,
-				amount:   1,
-				damage:   *skillUse.Damage,
-				lastUsed: event.Time,
+		func() subjectiveDamageDealt {
+			return subjectiveDamageDealt{
+				subject:     skillUse.Subject,
+				totalDamage: *skillUse.Damage,
+				skillDamage: []skillDamage{
+					{
+						name:     skillName,
+						amount:   1,
+						damage:   *skillUse.Damage,
+						lastUsed: event.Time,
+					},
+				},
 			}
 		},
-		func(counter *skillDamage) *skillDamage {
-			if counter.lastUsed != event.Time {
-				counter.amount++
-			}
-			counter.damage = counter.damage.Add(*skillUse.Damage)
-			counter.lastUsed = event.Time
+		func(subject subjectiveDamageDealt) subjectiveDamageDealt {
+			subject.totalDamage = subject.totalDamage.Add(*skillUse.Damage)
+			subject.skillDamage = utils.CreateUpdate(
+				subject.skillDamage,
+				findSkillDamage,
+				createSkillDamage,
+				updateSkillDamage,
+			)
 
-			return counter
+			slices.SortFunc(subject.skillDamage, skillDamageSort)
+
+			return subject
 		},
 	)
-	slices.SortFunc(col.skillDamage, func(a, b *skillDamage) int {
-		return cmp.Compare(b.damage.Total(), a.damage.Total())
-	})
 
-	// Collect total damage
-	col.totalDamage = col.totalDamage.Add(*skillUse.Damage)
+	// Add subjects to dropdown
+	col.subjectDropdown.SetOptions(utils.CreateUpdate(
+		col.subjectDropdown.Options(),
+		func(item fmt.Stringer) bool {
+			casted := item.(SubjectChoice)
+			return string(casted) == skillUse.Subject
+		},
+		func() fmt.Stringer {
+			return SubjectChoice(skillUse.Subject)
+		},
+		func(stringer fmt.Stringer) fmt.Stringer {
+			return stringer
+		},
+	))
 }
 
 func (col *DamageDealtCollector) Reset() {
-	col.skillDamage = nil
+	col.subjects = nil
+}
+
+func isSkillUseSubjectValuable(info abstract.StatisticsInformation, skill *abstract.SkillUse) bool {
+	if skill.Subject == info.CurrentUsername() {
+		return true
+	}
+
+	if strings.Contains(skill.Skill, "(Pet)") {
+		return true
+	}
+
+	lowTrimmedSubject := strings.ToLower(strings.TrimSpace(SplitOffId(skill.Subject)))
+
+	for _, expectedName := range info.Settings().EntitiesThatCountAsPets {
+		if lowTrimmedSubject == strings.ToLower(strings.TrimSpace(expectedName)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (col *DamageDealtCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {
-	if skillUse, ok := event.Contents.(*abstract.SkillUse); ok && skillUse.Damage != nil && skillUse.Subject == info.CurrentUsername() {
-		col.ingestDamage(event)
+	if skillUse, ok := event.Contents.(*abstract.SkillUse); ok && skillUse.Damage != nil && isSkillUseSubjectValuable(info, skillUse) {
+		col.ingestSkillDamage(info, event)
 	}
 
 	return nil
@@ -81,7 +189,7 @@ func (col *DamageDealtCollector) TabName() string {
 	return "Damage Dealt"
 }
 
-func (col *DamageDealtCollector) drawBar(state abstract.LayeredState, skill *skillDamage, maxDamage int, size unit.Dp) layout.Widget {
+func (col *DamageDealtCollector) drawBar(state abstract.LayeredState, skill skillDamage, maxDamage int, size unit.Dp) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		var progress = float64(skill.damage.Total()) / float64(maxDamage)
 
@@ -130,27 +238,43 @@ func (col *DamageDealtCollector) drawBar(state abstract.LayeredState, skill *ski
 }
 
 func (col *DamageDealtCollector) UI(state abstract.LayeredState) []layout.Widget {
-	var widgets []layout.Widget
+	if col.subjectDropdown.Changed() {
+		col.currentSubject = string(col.subjectDropdown.Value.(SubjectChoice))
+	}
 
-	var maxDamage int
-	for _, skill := range col.skillDamage {
-		if totalDamage := skill.damage.Total(); totalDamage > maxDamage {
-			maxDamage = totalDamage
+	widgets := []layout.Widget{
+		topBarSurface(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{
+				Axis: layout.Horizontal,
+			}.Layout(
+				gtx,
+				layout.Rigid(defaultDropdownStyle(state, col.subjectDropdown).Layout),
+			)
+		}),
+	}
+
+	subject := col.total
+	for _, possibleSubject := range col.subjects {
+		if possibleSubject.subject == col.currentSubject {
+			subject = possibleSubject
+			break
 		}
 	}
 
+	var maxDamage = subject.totalDamage.Total()
+
 	widgets = append(widgets, col.drawBar(
 		state,
-		&skillDamage{
+		skillDamage{
 			name:   "Total Damage",
 			amount: 0,
-			damage: col.totalDamage,
+			damage: col.total.totalDamage,
 		},
-		col.totalDamage.Total(),
+		maxDamage,
 		25,
 	))
 
-	for _, skill := range col.skillDamage {
+	for _, skill := range subject.skillDamage {
 		widgets = append(widgets, col.drawBar(state, skill, maxDamage, 40))
 	}
 

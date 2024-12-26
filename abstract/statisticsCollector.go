@@ -14,6 +14,7 @@ type StatisticsCollector interface {
 
 type StatisticsInformation interface {
 	CurrentUsername() string
+	Settings() *Settings
 }
 
-type StatisticsFactory func(path string, watch bool) (StatisticsCollector, error)
+type StatisticsFactory func(state GlobalState, path string, watch bool) (StatisticsCollector, error)

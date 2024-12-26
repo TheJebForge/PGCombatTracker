@@ -13,6 +13,7 @@ import (
 )
 
 type StatisticsCollector struct {
+	settings   *abstract.Settings
 	username   string
 	dead       *atomic.Bool
 	collectors []abstract.Collector
@@ -25,7 +26,7 @@ type StatisticsCollector struct {
 	notify     chan bool
 }
 
-func NewStatisticsCollector(path string, watchFile bool) (*StatisticsCollector, error) {
+func NewStatisticsCollector(state abstract.GlobalState, path string, watchFile bool) (*StatisticsCollector, error) {
 	file, err := os.Open(path)
 
 	if err != nil {
@@ -33,6 +34,7 @@ func NewStatisticsCollector(path string, watchFile bool) (*StatisticsCollector, 
 	}
 
 	return &StatisticsCollector{
+		settings: state.Settings(),
 		collectors: []abstract.Collector{
 			NewDamageDealtCollector(),
 			NewDamageTakenCollector(),
@@ -45,6 +47,10 @@ func NewStatisticsCollector(path string, watchFile bool) (*StatisticsCollector, 
 		lock:   new(sync.RWMutex),
 		notify: make(chan bool),
 	}, nil
+}
+
+func (stats *StatisticsCollector) Settings() *abstract.Settings {
+	return stats.settings
 }
 
 func (stats *StatisticsCollector) CurrentUsername() string {

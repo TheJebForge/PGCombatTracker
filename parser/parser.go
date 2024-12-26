@@ -88,6 +88,14 @@ func ParseLine(line string) (*abstract.ChatEvent, error) {
 		return parseReceivedCoins(timeValue, rest)
 	} else if strings.HasPrefix(rest, "***") {
 		return parseLogin(timeValue, rest)
+	} else if strings.HasPrefix(rest, "[Error]") {
+		_, rest, _ := strings.Cut(rest, "[Error] ")
+		return &abstract.ChatEvent{
+			Time: timeValue,
+			Contents: &abstract.ErrorLine{
+				Message: rest,
+			},
+		}, nil
 	}
 
 	return nil, nil
