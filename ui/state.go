@@ -141,7 +141,7 @@ func (g *GlobalState) Settings() *abstract.Settings {
 	return g.settings
 }
 
-func (g *GlobalState) GordonFolder() string {
+func (g *GlobalState) GorgonFolder() string {
 	return g.gorgonFolder
 }
 

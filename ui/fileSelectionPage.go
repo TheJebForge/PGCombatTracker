@@ -10,6 +10,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"github.com/samber/lo"
 	"github.com/sqweek/dialog"
 	"golang.org/x/exp/shiny/materialdesign/icons"
 	"image"
@@ -25,8 +26,10 @@ type FileSelectionPage struct {
 
 	// Widgets
 	fileList          *widget.List
+	refreshIcon       *widget.Icon
 	refreshButton     *widget.Clickable
 	watchFileCheckbox *widget.Bool
+	browseFileIcon    *widget.Icon
 	browseFileButton  *widget.Clickable
 	exitButton        *widget.Clickable
 	settingsIcon      *widget.Icon
@@ -37,6 +40,16 @@ type FileSelectionPage struct {
 }
 
 func NewFileSelectionPage() *FileSelectionPage {
+	refreshIcon, err := widget.NewIcon(icons.NavigationRefresh)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	browseIcon, err := widget.NewIcon(icons.FileFolderOpen)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	settingsIcon, err := widget.NewIcon(icons.ActionSettings)
 	if err != nil {
 		log.Fatalln(err)
@@ -51,10 +64,12 @@ func NewFileSelectionPage() *FileSelectionPage {
 				Axis: layout.Vertical,
 			},
 		},
+		refreshIcon:   refreshIcon,
 		refreshButton: &widget.Clickable{},
 		watchFileCheckbox: &widget.Bool{
 			Value: true,
 		},
+		browseFileIcon:   browseIcon,
 		browseFileButton: &widget.Clickable{},
 
 		settingsIcon:   settingsIcon,
@@ -89,13 +104,13 @@ func (p *FileSelectionPage) selectFile(fullPath string, state abstract.GlobalSta
 func (p *FileSelectionPage) Layout(ctx layout.Context, state abstract.GlobalState) error {
 	// Refresh files if marked as dirty
 	if p.dirty {
-		newFiles, err := parser.GetSortedLogFiles(state.GordonFolder())
+		newFiles, err := parser.GetSortedLogFiles(state.GorgonFolder())
 
 		if err != nil {
 			return err
 		}
 
-		p.files = utils.Map(newFiles, NewFileButton)
+		p.files = lo.Map(newFiles, NewFileButton)
 		p.dirty = false
 	}
 
@@ -113,7 +128,7 @@ func (p *FileSelectionPage) Layout(ctx layout.Context, state abstract.GlobalStat
 	}
 
 	layout.Flex{
-		Axis: layout.Horizontal,
+		Axis: layout.Vertical,
 	}.Layout(
 		ctx,
 		layout.Flexed(1, p.fileListUI(state)),
@@ -132,9 +147,15 @@ func (p *FileSelectionPage) Layout(ctx layout.Context, state abstract.GlobalStat
 func (p *FileSelectionPage) fileListUI(state abstract.GlobalState) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if p.dirty {
-			return layout.UniformInset(50).Layout(
+			return components.Canvas{
+				ExpandHorizontal: true,
+				ExpandVertical:   true,
+			}.Layout(
 				gtx,
-				material.Loader(state.Theme()).Layout,
+				components.CanvasItem{
+					Anchor: layout.Center,
+					Widget: material.Loader(state.Theme()).Layout,
+				},
 			)
 		}
 
@@ -149,7 +170,7 @@ func (p *FileSelectionPage) fileListUI(state abstract.GlobalState) layout.Widget
 					button := p.files[index]
 
 					if button.openButton.Clicked(gtx) {
-						p.selectFile(path.Join(state.GordonFolder(), button.file.Name()), state)
+						p.selectFile(path.Join(state.GorgonFolder(), button.file.Name()), state)
 					}
 
 					return layout.Flex{
@@ -172,41 +193,59 @@ func (p *FileSelectionPage) sidePanelUI(state abstract.GlobalState) layout.Widge
 		return layout.UniformInset(utils.CommonSpacing).Layout(
 			gtx,
 			func(gtx layout.Context) layout.Dimensions {
-				return components.Canvas{
-					ExpandVertical: true,
-					MinSize:        image.Point{X: gtx.Dp(320)},
+				return layout.Flex{
+					Axis:      layout.Horizontal,
+					Alignment: layout.Middle,
 				}.Layout(
 					gtx,
-					components.CanvasItem{
-						Widget: func(gtx layout.Context) layout.Dimensions {
-							return layout.Flex{
-								Axis: layout.Vertical,
-							}.Layout(
-								gtx,
-								layout.Rigid(material.CheckBox(
-									state.Theme(),
-									p.watchFileCheckbox,
-									"Watch for changes in file",
-								).Layout),
-								utils.FlexSpacerH(utils.CommonSpacing),
-								layout.Rigid(material.Button(
-									state.Theme(),
-									p.browseFileButton,
-									"Browse File",
-								).Layout),
-							)
-						},
-					},
-					components.CanvasItem{
-						Anchor: layout.NE,
-						Widget: material.Button(state.Theme(), p.refreshButton, "Refresh").Layout,
-					},
-					components.CanvasItem{
-						Anchor: layout.SE,
-						Widget: material.IconButton(state.Theme(), p.settingsButton, p.settingsIcon, "Settings").Layout,
-					},
+					layout.Rigid(material.IconButton(state.Theme(), p.refreshButton, p.refreshIcon, "Refresh").Layout),
+					utils.FlexSpacerW(utils.CommonSpacing),
+					layout.Rigid(material.IconButton(state.Theme(), p.browseFileButton, p.browseFileIcon, "Browse File").Layout),
+					utils.FlexSpacerW(utils.CommonSpacing),
+					layout.Flexed(1, material.CheckBox(
+						state.Theme(),
+						p.watchFileCheckbox,
+						"Watch for changes in file",
+					).Layout),
+					layout.Rigid(material.IconButton(state.Theme(), p.settingsButton, p.settingsIcon, "Settings").Layout),
 				)
 			},
+			//func(gtx layout.Context) layout.Dimensions {
+			//	return components.Canvas{
+			//		ExpandVertical: true,
+			//		MinSize:        image.Point{X: gtx.Dp(320)},
+			//	}.Layout(
+			//		gtx,
+			//		components.CanvasItem{
+			//			Widget: func(gtx layout.Context) layout.Dimensions {
+			//				return layout.Flex{
+			//					Axis: layout.Vertical,
+			//				}.Layout(
+			//					gtx,
+			//					layout.Rigid(material.CheckBox(
+			//						state.Theme(),
+			//						p.watchFileCheckbox,
+			//						"Watch for changes in file",
+			//					).Layout),
+			//					utils.FlexSpacerH(utils.CommonSpacing),
+			//					layout.Rigid(material.Button(
+			//						state.Theme(),
+			//						p.browseFileButton,
+			//						"Browse File",
+			//					).Layout),
+			//				)
+			//			},
+			//		},
+			//		components.CanvasItem{
+			//			Anchor: layout.NE,
+			//			Widget: material.Button(state.Theme(), p.refreshButton, "Refresh").Layout,
+			//		},
+			//		components.CanvasItem{
+			//			Anchor: layout.SE,
+			//			Widget: material.IconButton(state.Theme(), p.settingsButton, p.settingsIcon, "Settings").Layout,
+			//		},
+			//	)
+			//},
 		)
 	}
 }
@@ -223,7 +262,7 @@ type FileButton struct {
 	openButton *widget.Clickable
 }
 
-func NewFileButton(fileInfo os.FileInfo) FileButton {
+func NewFileButton(fileInfo os.FileInfo, _ int) FileButton {
 	return FileButton{
 		file:       fileInfo,
 		openButton: &widget.Clickable{},

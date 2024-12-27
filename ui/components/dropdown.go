@@ -72,8 +72,8 @@ type DropdownStyle struct {
 	TextSize       unit.Sp
 	DialogTextSize unit.Sp
 	Inset          layout.Inset
-	MinWidth       unit.Dp
 	DialogMinWidth unit.Dp
+	NoLabel        bool
 
 	modalLayer *ModalLayer
 	dropdown   *Dropdown
@@ -88,7 +88,6 @@ func StyleDropdown(theme *material.Theme, modalLayer *ModalLayer, dropdown *Drop
 			Top: 10, Bottom: 10,
 			Left: 12, Right: 12,
 		},
-		MinWidth:       50,
 		DialogMinWidth: 200,
 
 		modalLayer: modalLayer,
@@ -103,11 +102,9 @@ func (d DropdownStyle) dropdownButton() layout.Widget {
 			gtx,
 			func(gtx layout.Context) layout.Dimensions {
 				return d.Inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					cgtx := gtx
-					cgtx.Constraints.Min.X = gtx.Dp(d.MinWidth)
-
 					return layout.Flex{
-						Axis: layout.Horizontal,
+						Axis:      layout.Horizontal,
+						Alignment: layout.Middle,
 					}.Layout(
 						gtx,
 						layout.Rigid(material.Label(d.theme, d.TextSize, d.dropdown.Value.String()).Layout),
@@ -132,15 +129,16 @@ func (d DropdownStyle) Layout(gtx layout.Context) layout.Dimensions {
 		d.Open(d.modalLayer)
 	}
 
+	if d.NoLabel {
+		return d.dropdownButton()(gtx)
+	}
+
 	return layout.Flex{
-		Axis: layout.Horizontal,
+		Axis:      layout.Horizontal,
+		Alignment: layout.Middle,
 	}.Layout(
 		gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{
-				Top: d.Inset.Top,
-			}.Layout(gtx, material.Label(d.theme, d.TextSize, d.dropdown.Title).Layout)
-		}),
+		layout.Rigid(material.Label(d.theme, d.TextSize, d.dropdown.Title).Layout),
 		utils.FlexSpacerW(utils.CommonSpacing),
 		layout.Rigid(d.dropdownButton()),
 	)

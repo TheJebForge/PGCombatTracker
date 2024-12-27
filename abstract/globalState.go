@@ -11,7 +11,7 @@ type GlobalState interface {
 	ReloadSettings()
 	SaveSettings()
 
-	GordonFolder() string
+	GorgonFolder() string
 	StatisticsCollector() StatisticsCollector
 	Page() Page
 	Storage() map[string]any

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"gioui.org/layout"
 	"gioui.org/unit"
+	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
 	"log"
@@ -26,6 +27,7 @@ type skillDamage struct {
 type subjectiveDamageDealt struct {
 	subject        string
 	totalDamage    abstract.Vitals
+	maxDamage      abstract.Vitals
 	indirectDamage abstract.Vitals
 	skillDamage    []skillDamage
 }
@@ -47,6 +49,7 @@ func NewDamageDealtCollector() *DamageDealtCollector {
 
 	return &DamageDealtCollector{
 		subjectDropdown: subjectDropdown,
+		longFormatBool:  &widget.Bool{},
 	}
 }
 
@@ -56,6 +59,7 @@ type DamageDealtCollector struct {
 	subjects       []subjectiveDamageDealt
 
 	subjectDropdown *components.Dropdown
+	longFormatBool  *widget.Bool
 }
 
 func (col *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInformation, event *abstract.ChatEvent) {
@@ -87,6 +91,9 @@ func (col *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInfor
 
 		return skill
 	}
+	skillDamageMax := func(a, b skillDamage) int {
+		return cmp.Compare(a.damage.Total(), b.damage.Total())
+	}
 	skillDamageSort := func(a, b skillDamage) int {
 		return cmp.Compare(b.damage.Total(), a.damage.Total())
 	}
@@ -99,6 +106,7 @@ func (col *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInfor
 		createSkillDamage,
 		updateSkillDamage,
 	)
+	col.total.maxDamage = slices.MaxFunc(col.total.skillDamage, skillDamageMax).damage
 
 	slices.SortFunc(col.total.skillDamage, skillDamageSort)
 
@@ -130,6 +138,7 @@ func (col *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInfor
 				createSkillDamage,
 				updateSkillDamage,
 			)
+			subject.maxDamage = slices.MaxFunc(subject.skillDamage, skillDamageMax).damage
 
 			slices.SortFunc(subject.skillDamage, skillDamageSort)
 
@@ -153,20 +162,28 @@ func (col *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInfor
 	))
 }
 
-func (col *DamageDealtCollector) Reset() {
-	col.subjects = nil
+func (col *DamageDealtCollector) ingestIndirect(event *abstract.ChatEvent) {
+	indirect := event.Contents.(*abstract.IndirectDamage)
+	col.total.indirectDamage = col.total.indirectDamage.Add(indirect.Damage.Abs())
 }
 
-func isSkillUseSubjectValuable(info abstract.StatisticsInformation, skill *abstract.SkillUse) bool {
-	if skill.Subject == info.CurrentUsername() {
+func (col *DamageDealtCollector) Reset() {
+	col.subjects = nil
+	col.total = subjectiveDamageDealt{}
+	col.subjectDropdown.SetOptions([]fmt.Stringer{SubjectChoice("")})
+	col.currentSubject = ""
+}
+
+func isSkillUseSubjectValuable(info abstract.StatisticsInformation, subject, skill string) bool {
+	if subject == info.CurrentUsername() {
 		return true
 	}
 
-	if strings.Contains(skill.Skill, "(Pet)") {
+	if strings.Contains(skill, "(Pet)") {
 		return true
 	}
 
-	lowTrimmedSubject := strings.ToLower(strings.TrimSpace(SplitOffId(skill.Subject)))
+	lowTrimmedSubject := strings.ToLower(strings.TrimSpace(SplitOffId(subject)))
 
 	for _, expectedName := range info.Settings().EntitiesThatCountAsPets {
 		if lowTrimmedSubject == strings.ToLower(strings.TrimSpace(expectedName)) {
@@ -178,8 +195,12 @@ func isSkillUseSubjectValuable(info abstract.StatisticsInformation, skill *abstr
 }
 
 func (col *DamageDealtCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {
-	if skillUse, ok := event.Contents.(*abstract.SkillUse); ok && skillUse.Damage != nil && isSkillUseSubjectValuable(info, skillUse) {
+	if skillUse, ok := event.Contents.(*abstract.SkillUse); ok && skillUse.Damage != nil && isSkillUseSubjectValuable(info, skillUse.Subject, skillUse.Skill) {
 		col.ingestSkillDamage(info, event)
+	}
+
+	if indirect, ok := event.Contents.(*abstract.IndirectDamage); ok && !isSkillUseSubjectValuable(info, indirect.Subject, "") {
+		col.ingestIndirect(event)
 	}
 
 	return nil
@@ -231,27 +252,30 @@ func (col *DamageDealtCollector) drawBar(state abstract.LayeredState, skill skil
 					X: gtx.Dp(-utils.CommonSpacing),
 					Y: gtx.Dp(-2.5),
 				},
-				Widget: material.Label(state.Theme(), 12, skill.damage.String()).Layout,
+				Widget: material.Label(state.Theme(), 12, skill.damage.StringCL(col.longFormatBool.Value)).Layout,
 			},
 		)
 	}
 }
 
-func (col *DamageDealtCollector) UI(state abstract.LayeredState) []layout.Widget {
+func (col *DamageDealtCollector) UI(state abstract.LayeredState) (layout.Widget, []layout.Widget) {
 	if col.subjectDropdown.Changed() {
 		col.currentSubject = string(col.subjectDropdown.Value.(SubjectChoice))
 	}
 
-	widgets := []layout.Widget{
-		topBarSurface(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{
-				Axis: layout.Horizontal,
-			}.Layout(
-				gtx,
-				layout.Rigid(defaultDropdownStyle(state, col.subjectDropdown).Layout),
-			)
-		}),
-	}
+	topWidget := topBarSurface(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:      layout.Horizontal,
+			Alignment: layout.Middle,
+		}.Layout(
+			gtx,
+			layout.Rigid(defaultDropdownStyle(state, col.subjectDropdown).Layout),
+			utils.FlexSpacerW(utils.CommonSpacing),
+			layout.Rigid(defaultCheckboxStyle(state, col.longFormatBool, "Use long numbers").Layout),
+		)
+	})
+
+	var widgets []layout.Widget
 
 	subject := col.total
 	for _, possibleSubject := range col.subjects {
@@ -261,7 +285,7 @@ func (col *DamageDealtCollector) UI(state abstract.LayeredState) []layout.Widget
 		}
 	}
 
-	var maxDamage = subject.totalDamage.Total()
+	var maxDamage = subject.maxDamage.Total()
 
 	widgets = append(widgets, col.drawBar(
 		state,
@@ -278,5 +302,16 @@ func (col *DamageDealtCollector) UI(state abstract.LayeredState) []layout.Widget
 		widgets = append(widgets, col.drawBar(state, skill, maxDamage, 40))
 	}
 
-	return widgets
+	widgets = append(widgets, col.drawBar(
+		state,
+		skillDamage{
+			name:   "Indirect Damage",
+			amount: 0,
+			damage: col.total.indirectDamage,
+		},
+		col.total.indirectDamage.Total(),
+		25,
+	))
+
+	return topWidget, widgets
 }

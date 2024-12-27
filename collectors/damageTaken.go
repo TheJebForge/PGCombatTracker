@@ -132,7 +132,8 @@ func (g GroupBy) String() string {
 func (d *DamageTakenCollector) topBar(state abstract.LayeredState) layout.Widget {
 	return topBarSurface(func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{
-			Axis: layout.Horizontal,
+			Axis:      layout.Horizontal,
+			Alignment: layout.Middle,
 		}.Layout(
 			gtx,
 			layout.Rigid(defaultDropdownStyle(state, d.groupByDropdown).Layout),
@@ -140,10 +141,10 @@ func (d *DamageTakenCollector) topBar(state abstract.LayeredState) layout.Widget
 	})
 }
 
-func (d *DamageTakenCollector) UI(state abstract.LayeredState) []layout.Widget {
-	widgets := []layout.Widget{
-		d.topBar(state),
-	}
+func (d *DamageTakenCollector) UI(state abstract.LayeredState) (layout.Widget, []layout.Widget) {
+	topWidget := d.topBar(state)
+
+	var widgets []layout.Widget
 
 	// All the bars go here
 	var damageArray []*enemyDamage
@@ -207,5 +208,5 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) []layout.Widget {
 		)
 	}
 
-	return widgets
+	return topWidget, widgets
 }

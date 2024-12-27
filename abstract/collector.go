@@ -8,5 +8,5 @@ type Collector interface {
 	Reset()
 	Collect(info StatisticsInformation, event *ChatEvent) error
 	TabName() string
-	UI(state LayeredState) []layout.Widget
+	UI(state LayeredState) (layout.Widget, []layout.Widget)
 }

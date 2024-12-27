@@ -243,7 +243,7 @@ func parseRecovered(subject, rest string) (*abstract.Recovered, error) {
 
 	return &abstract.Recovered{
 		Subject: subject,
-		Healed: &abstract.Vitals{
+		Healed: abstract.Vitals{
 			Health: healthValue,
 			Armor:  armorValue,
 			Power:  powerValue,
@@ -281,7 +281,7 @@ func parseIndirectDamage(subject, rest string) (*abstract.IndirectDamage, error)
 
 	return &abstract.IndirectDamage{
 		Subject: subject,
-		Damage: &abstract.Vitals{
+		Damage: abstract.Vitals{
 			Health: healthValue,
 			Armor:  armorValue,
 			Power:  powerValue,

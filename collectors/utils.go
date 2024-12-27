@@ -5,6 +5,8 @@ import (
 	"PGCombatTracker/ui/components"
 	"PGCombatTracker/utils"
 	"gioui.org/layout"
+	"gioui.org/widget"
+	"gioui.org/widget/material"
 	"strings"
 	"unicode"
 )
@@ -15,9 +17,15 @@ func defaultDropdownStyle(state abstract.LayeredState, dropdown *components.Drop
 	style.TextSize = 12
 	style.Inset = layout.UniformInset(3)
 	style.DialogTextSize = 12
-	style.MinWidth = 50
 	style.DialogMinWidth = 250
 
+	return style
+}
+
+func defaultCheckboxStyle(state abstract.GlobalState, bool *widget.Bool, label string) material.CheckBoxStyle {
+	style := material.CheckBox(state.Theme(), bool, label)
+	style.TextSize = 12
+	style.Size = 18
 	return style
 }
 
@@ -25,7 +33,7 @@ func topBarSurface(inner layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		return layout.Background{}.Layout(
 			gtx,
-			utils.MakeColoredBG(utils.BG),
+			utils.MakeColoredBG(utils.HalfBG),
 			func(gtx layout.Context) layout.Dimensions {
 				return layout.UniformInset(utils.CommonSpacing).Layout(gtx, inner)
 			},

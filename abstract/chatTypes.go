@@ -38,12 +38,12 @@ type Vitals struct {
 
 type Recovered struct {
 	Subject string
-	Healed  *Vitals
+	Healed  Vitals
 }
 
 type IndirectDamage struct {
 	Subject string
-	Damage  *Vitals
+	Damage  Vitals
 }
 
 type XPGained struct {
@@ -122,6 +122,12 @@ func (event Vitals) Abs() Vitals {
 }
 func (event Vitals) Total() int {
 	return event.Health + event.Armor + event.Power
+}
+
+// StringCL Format vitals as conditionally long number
+// StringCL Format vitals as conditionally long numbers
+func (event Vitals) StringCL(long bool) string {
+	return utils.ConditionalDamageLabel(event.Health, event.Armor, event.Power, long)
 }
 
 func (event *Recovered) ImplementsChatContent() {}
