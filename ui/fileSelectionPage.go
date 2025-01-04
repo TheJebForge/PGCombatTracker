@@ -28,7 +28,6 @@ type FileSelectionPage struct {
 	fileList          *widget.List
 	refreshIcon       *widget.Icon
 	refreshButton     *widget.Clickable
-	watchFileCheckbox *widget.Bool
 	browseFileIcon    *widget.Icon
 	browseFileButton  *widget.Clickable
 	exitButton        *widget.Clickable
@@ -66,9 +65,7 @@ func NewFileSelectionPage() *FileSelectionPage {
 		},
 		refreshIcon:   refreshIcon,
 		refreshButton: &widget.Clickable{},
-		watchFileCheckbox: &widget.Bool{
-			Value: true,
-		},
+
 		browseFileIcon:   browseIcon,
 		browseFileButton: &widget.Clickable{},
 
@@ -89,16 +86,25 @@ func (p *FileSelectionPage) openDialog(state abstract.GlobalState) {
 }
 
 func (p *FileSelectionPage) selectFile(fullPath string, state abstract.GlobalState) {
-	if state.OpenFile(fullPath, p.watchFileCheckbox.Value) {
-		page, err := NewStatisticsPage(state)
+	markers, err := state.FindMarkers(fullPath)
 
-		if err != nil {
-			log.Printf("Failed to open statistics page: %v\n", err)
-			return
-		}
-
-		state.SwitchPage(page)
+	if err != nil {
+		log.Printf("Failed to open markers page: %v\n", err)
+		return
 	}
+
+	state.SwitchPage(NewMarkersPage(fullPath, markers))
+
+	//if state.OpenFile(fullPath, p.watchFileCheckbox.Value) {
+	//	page, err := NewStatisticsPage(state)
+	//
+	//	if err != nil {
+	//		log.Printf("Failed to open statistics page: %v\n", err)
+	//		return
+	//	}
+	//
+	//	state.SwitchPage(page)
+	//}
 }
 
 func (p *FileSelectionPage) Layout(ctx layout.Context, state abstract.GlobalState) error {
@@ -202,50 +208,10 @@ func (p *FileSelectionPage) sidePanelUI(state abstract.GlobalState) layout.Widge
 					utils.FlexSpacerW(utils.CommonSpacing),
 					layout.Rigid(material.IconButton(state.Theme(), p.browseFileButton, p.browseFileIcon, "Browse File").Layout),
 					utils.FlexSpacerW(utils.CommonSpacing),
-					layout.Flexed(1, material.CheckBox(
-						state.Theme(),
-						p.watchFileCheckbox,
-						"Watch for changes in file",
-					).Layout),
+					layout.Flexed(1, layout.Spacer{}.Layout),
 					layout.Rigid(material.IconButton(state.Theme(), p.settingsButton, p.settingsIcon, "Settings").Layout),
 				)
 			},
-			//func(gtx layout.Context) layout.Dimensions {
-			//	return components.Canvas{
-			//		ExpandVertical: true,
-			//		MinSize:        image.Point{X: gtx.Dp(320)},
-			//	}.Layout(
-			//		gtx,
-			//		components.CanvasItem{
-			//			Widget: func(gtx layout.Context) layout.Dimensions {
-			//				return layout.Flex{
-			//					Axis: layout.Vertical,
-			//				}.Layout(
-			//					gtx,
-			//					layout.Rigid(material.CheckBox(
-			//						state.Theme(),
-			//						p.watchFileCheckbox,
-			//						"Watch for changes in file",
-			//					).Layout),
-			//					utils.FlexSpacerH(utils.CommonSpacing),
-			//					layout.Rigid(material.Button(
-			//						state.Theme(),
-			//						p.browseFileButton,
-			//						"Browse File",
-			//					).Layout),
-			//				)
-			//			},
-			//		},
-			//		components.CanvasItem{
-			//			Anchor: layout.NE,
-			//			Widget: material.Button(state.Theme(), p.refreshButton, "Refresh").Layout,
-			//		},
-			//		components.CanvasItem{
-			//			Anchor: layout.SE,
-			//			Widget: material.IconButton(state.Theme(), p.settingsButton, p.settingsIcon, "Settings").Layout,
-			//		},
-			//	)
-			//},
 		)
 	}
 }

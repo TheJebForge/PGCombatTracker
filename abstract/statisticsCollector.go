@@ -3,6 +3,7 @@ package abstract
 import "sync"
 
 type StatisticsCollector interface {
+	SaveMarker(state GlobalState, name string)
 	Mutex() *sync.RWMutex
 	Reset()
 	Collectors() []Collector
@@ -17,4 +18,4 @@ type StatisticsInformation interface {
 	Settings() *Settings
 }
 
-type StatisticsFactory func(state GlobalState, path string, watch bool) (StatisticsCollector, error)
+type StatisticsFactory func(state GlobalState, path string, watch bool, timeFrames []MarkerTimeFrame) (StatisticsCollector, error)

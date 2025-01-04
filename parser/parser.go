@@ -7,19 +7,20 @@ import (
 	"time"
 )
 
-const timeFormat = "06-01-02 15:04:05"
+const TimeFormat = "06-01-02 15:04:05"
 
-func ParseLine(line string) (*abstract.ChatEvent, error) {
+func ParseLine(line string) *abstract.ChatEvent {
 	timeString, rest, found := strings.Cut(line, "\t")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
-	timeValue, err := time.Parse(timeFormat, timeString)
+	loc := time.Now().Location()
+	timeValue, err := time.ParseInLocation(TimeFormat, timeString, loc)
 
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	// We got Time, look for combat lines
@@ -27,58 +28,58 @@ func ParseLine(line string) (*abstract.ChatEvent, error) {
 		_, rest, found = strings.Cut(rest, " ")
 
 		if !found {
-			return nil, nil
+			return nil
 		}
 
 		subject, rest, found := strings.Cut(rest, ": ")
 
 		if !found {
-			return nil, nil
+			return nil
 		}
 
 		skill, rest, found := strings.Cut(rest, " on ")
 
 		if found {
-			skillUse, err := parseSkillUse(subject, skill, rest)
+			skillUse := parseSkillUse(subject, skill, rest)
 
-			if err != nil {
-				return nil, err
+			if skillUse == nil {
+				return nil
 			}
 
 			return &abstract.ChatEvent{
 				Time:     timeValue,
 				Contents: skillUse,
-			}, nil
+			}
 		}
 
 		left, rest, found := strings.Cut(skill, "Recovered: ")
 
 		if found {
-			recovered, err := parseRecovered(subject, rest)
+			recovered := parseRecovered(subject, rest)
 
-			if err != nil {
-				return nil, err
+			if recovered == nil {
+				return nil
 			}
 
 			return &abstract.ChatEvent{
 				Time:     timeValue,
 				Contents: recovered,
-			}, nil
+			}
 		}
 
 		_, rest, found = strings.Cut(left, "Suffered indirect dmg: ")
 
 		if found {
-			indirect, err := parseIndirectDamage(subject, rest)
+			indirect := parseIndirectDamage(subject, rest)
 
-			if err != nil {
-				return nil, err
+			if indirect == nil {
+				return nil
 			}
 
 			return &abstract.ChatEvent{
 				Time:     timeValue,
 				Contents: indirect,
-			}, nil
+			}
 		}
 	} else if strings.HasPrefix(rest, "[Status] You earned ") {
 		return parseXPGain(timeValue, rest)
@@ -95,23 +96,41 @@ func ParseLine(line string) (*abstract.ChatEvent, error) {
 			Contents: &abstract.ErrorLine{
 				Message: rest,
 			},
-		}, nil
+		}
+	} else if strings.HasPrefix(rest, "[!MARKER!]") {
+		_, rest, found := strings.Cut(rest, "[!MARKER!] ")
+		if !found {
+			return nil
+		}
+
+		user, name, found := strings.Cut(rest, ": ")
+		if !found {
+			return nil
+		}
+
+		return &abstract.ChatEvent{
+			Time: timeValue,
+			Contents: &abstract.MarkerLine{
+				User: user,
+				Name: strings.TrimSpace(name),
+			},
+		}
 	}
 
-	return nil, nil
+	return nil
 }
 
-func parseLogin(timeValue time.Time, rest string) (*abstract.ChatEvent, error) {
+func parseLogin(timeValue time.Time, rest string) *abstract.ChatEvent {
 	_, rest, found := strings.Cut(rest, "* Logged In As ")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	name, _, found := strings.Cut(rest, ".")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	return &abstract.ChatEvent{
@@ -119,10 +138,10 @@ func parseLogin(timeValue time.Time, rest string) (*abstract.ChatEvent, error) {
 		Contents: &abstract.Login{
 			Name: name,
 		},
-	}, nil
+	}
 }
 
-func parseSkillUse(subject, skill, rest string) (*abstract.SkillUse, error) {
+func parseSkillUse(subject, skill, rest string) *abstract.SkillUse {
 	var (
 		victim string
 		found  bool
@@ -140,7 +159,7 @@ func parseSkillUse(subject, skill, rest string) (*abstract.SkillUse, error) {
 		victim, rest, found = strings.Cut(rest, "!")
 
 		if !found {
-			return nil, nil
+			return nil
 		}
 	}
 
@@ -156,7 +175,7 @@ func parseSkillUse(subject, skill, rest string) (*abstract.SkillUse, error) {
 			Crit:     crit,
 			Evaded:   evaded,
 			Fatality: fatality,
-		}, nil
+		}
 	}
 
 	if strings.Contains(rest, "none") {
@@ -168,7 +187,7 @@ func parseSkillUse(subject, skill, rest string) (*abstract.SkillUse, error) {
 			Evaded:   evaded,
 			Fatality: fatality,
 			Damage:   &abstract.Vitals{},
-		}, nil
+		}
 	}
 
 	health, rest, found := strings.Cut(rest, " health")
@@ -210,10 +229,10 @@ func parseSkillUse(subject, skill, rest string) (*abstract.SkillUse, error) {
 			Power:  powerValue,
 		},
 		Fatality: fatality,
-	}, nil
+	}
 }
 
-func parseRecovered(subject, rest string) (*abstract.Recovered, error) {
+func parseRecovered(subject, rest string) *abstract.Recovered {
 	health, rest, found := strings.Cut(rest, " health")
 	if !found {
 		rest = health
@@ -248,10 +267,10 @@ func parseRecovered(subject, rest string) (*abstract.Recovered, error) {
 			Armor:  armorValue,
 			Power:  powerValue,
 		},
-	}, nil
+	}
 }
 
-func parseIndirectDamage(subject, rest string) (*abstract.IndirectDamage, error) {
+func parseIndirectDamage(subject, rest string) *abstract.IndirectDamage {
 	health, rest, found := strings.Cut(rest, " health")
 	if !found {
 		rest = health
@@ -286,14 +305,14 @@ func parseIndirectDamage(subject, rest string) (*abstract.IndirectDamage, error)
 			Armor:  armorValue,
 			Power:  powerValue,
 		},
-	}, nil
+	}
 }
 
-func parseXPGain(time time.Time, line string) (*abstract.ChatEvent, error) {
+func parseXPGain(time time.Time, line string) *abstract.ChatEvent {
 	_, rest, found := strings.Cut(line, "You earned ")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	xp, rest, found := strings.Cut(rest, " XP in ")
@@ -303,14 +322,14 @@ func parseXPGain(time time.Time, line string) (*abstract.ChatEvent, error) {
 		xpValue, _ := strconv.Atoi(xp)
 
 		if !found {
-			return nil, nil
+			return nil
 		}
 
 		level, rest, found := strings.Cut(rest, " in ")
 		levelValue, _ := strconv.Atoi(level)
 
 		if !found {
-			return nil, nil
+			return nil
 		}
 
 		skill, _, _ := strings.Cut(rest, "!")
@@ -322,7 +341,7 @@ func parseXPGain(time time.Time, line string) (*abstract.ChatEvent, error) {
 				Skill: skill,
 				Level: levelValue,
 			},
-		}, nil
+		}
 	}
 
 	xpValue, _ := strconv.Atoi(xp)
@@ -335,20 +354,20 @@ func parseXPGain(time time.Time, line string) (*abstract.ChatEvent, error) {
 			XP:    xpValue,
 			Skill: skill,
 		},
-	}, nil
+	}
 }
 
-func parseFoundCoins(time time.Time, line string) (*abstract.ChatEvent, error) {
+func parseFoundCoins(time time.Time, line string) *abstract.ChatEvent {
 	_, rest, found := strings.Cut(line, "You searched the corpse and found ")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	coins, _, found := strings.Cut(rest, " coins")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	coinsValue, _ := strconv.Atoi(coins)
@@ -358,20 +377,20 @@ func parseFoundCoins(time time.Time, line string) (*abstract.ChatEvent, error) {
 		Contents: &abstract.FoundCoins{
 			Coins: coinsValue,
 		},
-	}, nil
+	}
 }
 
-func parseReceivedCoins(time time.Time, line string) (*abstract.ChatEvent, error) {
+func parseReceivedCoins(time time.Time, line string) *abstract.ChatEvent {
 	_, rest, found := strings.Cut(line, "You receive ")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	coins, _, found := strings.Cut(rest, " coins")
 
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	coinsValue, _ := strconv.Atoi(coins)
@@ -381,5 +400,5 @@ func parseReceivedCoins(time time.Time, line string) (*abstract.ChatEvent, error
 		Contents: &abstract.ReceivedCoins{
 			Coins: coinsValue,
 		},
-	}, nil
+	}
 }

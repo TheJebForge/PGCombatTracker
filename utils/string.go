@@ -56,3 +56,7 @@ func PascalSplit(src string) (entries []string) {
 	}
 	return
 }
+
+type LongFormatable interface {
+	StringCL(long bool) string
+}

@@ -69,6 +69,11 @@ type ErrorLine struct {
 	Message string
 }
 
+type MarkerLine struct {
+	User string
+	Name string
+}
+
 func (event *ChatEvent) String() string {
 	return fmt.Sprintf("%v %v", event.Time.Format(time.DateTime), event.Contents)
 }
@@ -163,4 +168,9 @@ func (event *ReceivedCoins) String() string {
 func (e *ErrorLine) ImplementsChatContent() {}
 func (e *ErrorLine) String() string {
 	return fmt.Sprintf("[ERROR]: %v", e.Message)
+}
+
+func (e *MarkerLine) ImplementsChatContent() {}
+func (e *MarkerLine) String() string {
+	return fmt.Sprintf("[!MARKER!] %v: %v", e.User, e.Name)
 }

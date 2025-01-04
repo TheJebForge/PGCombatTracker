@@ -70,6 +70,7 @@ func (d *Dropdown) SetOptions(options []fmt.Stringer) {
 
 type DropdownStyle struct {
 	TextSize       unit.Sp
+	MaxWidth       unit.Dp
 	DialogTextSize unit.Sp
 	Inset          layout.Inset
 	DialogMinWidth unit.Dp
@@ -83,6 +84,7 @@ type DropdownStyle struct {
 func StyleDropdown(theme *material.Theme, modalLayer *ModalLayer, dropdown *Dropdown) DropdownStyle {
 	return DropdownStyle{
 		TextSize:       theme.TextSize,
+		MaxWidth:       200,
 		DialogTextSize: theme.TextSize,
 		Inset: layout.Inset{
 			Top: 10, Bottom: 10,
@@ -107,7 +109,11 @@ func (d DropdownStyle) dropdownButton() layout.Widget {
 						Alignment: layout.Middle,
 					}.Layout(
 						gtx,
-						layout.Rigid(material.Label(d.theme, d.TextSize, d.dropdown.Value.String()).Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							cgtx := gtx
+							cgtx.Constraints.Max.X = gtx.Dp(d.MaxWidth)
+							return material.Label(d.theme, d.TextSize, d.dropdown.Value.String()).Layout(cgtx)
+						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							cgtx := gtx
 							cgtx.Constraints.Min.X = gtx.Dp(unit.Dp(d.TextSize * 1.25))

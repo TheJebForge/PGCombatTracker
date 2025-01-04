@@ -15,10 +15,12 @@ import (
 type StatisticsCollector struct {
 	settings   *abstract.Settings
 	username   string
+	timeFrames []abstract.MarkerTimeFrame
 	dead       *atomic.Bool
 	collectors []abstract.Collector
 	quit       chan bool
 	watch      bool
+	fullPath   string
 	file       *os.File
 	reader     *bufio.Reader
 	lock       *sync.RWMutex
@@ -26,7 +28,7 @@ type StatisticsCollector struct {
 	notify     chan bool
 }
 
-func NewStatisticsCollector(state abstract.GlobalState, path string, watchFile bool) (*StatisticsCollector, error) {
+func NewStatisticsCollector(state abstract.GlobalState, path string, watchFile bool, timeFrames []abstract.MarkerTimeFrame) (*StatisticsCollector, error) {
 	file, err := os.Open(path)
 
 	if err != nil {
@@ -38,15 +40,27 @@ func NewStatisticsCollector(state abstract.GlobalState, path string, watchFile b
 		collectors: []abstract.Collector{
 			NewDamageDealtCollector(),
 			NewDamageTakenCollector(),
+			NewHealingCollector(),
+			NewSkillsCollector(),
+			NewLevelingCollector(),
+			NewMiscCollector(),
 		},
-		dead:   &atomic.Bool{},
-		quit:   make(chan bool, 1),
-		watch:  watchFile,
-		file:   file,
-		reader: bufio.NewReader(file),
-		lock:   new(sync.RWMutex),
-		notify: make(chan bool),
+		timeFrames: timeFrames,
+		dead:       &atomic.Bool{},
+		quit:       make(chan bool, 1),
+		watch:      watchFile,
+		fullPath:   path,
+		file:       file,
+		reader:     bufio.NewReader(file),
+		lock:       new(sync.RWMutex),
+		notify:     make(chan bool),
 	}, nil
+}
+
+func (stats *StatisticsCollector) SaveMarker(state abstract.GlobalState, name string) {
+	stats.lock.Lock()
+	state.SaveMarker(stats.fullPath, name, stats.username)
+	stats.lock.Unlock()
 }
 
 func (stats *StatisticsCollector) Settings() *abstract.Settings {
@@ -94,12 +108,40 @@ func (stats *StatisticsCollector) Reset() {
 	stats.lock.Unlock()
 }
 
+func checkIfHasId(name string) bool {
+	return name == SplitOffId(name)
+}
+
+func (stats *StatisticsCollector) FindUsername(event *abstract.ChatEvent) string {
+	switch c := event.Contents.(type) {
+	case *abstract.SkillUse:
+		if checkIfHasId(c.Subject) {
+			return c.Subject
+		}
+
+		if checkIfHasId(c.Victim) {
+			return c.Victim
+		}
+	case *abstract.IndirectDamage:
+		if checkIfHasId(c.Subject) {
+			return c.Subject
+		}
+	case *abstract.Recovered:
+		if checkIfHasId(c.Subject) {
+			return c.Subject
+		}
+	}
+	return ""
+}
+
 func (stats *StatisticsCollector) Run() {
 	fileName := stats.file.Name()
 
 	log.Printf("Starting to read file at '%v'\n", fileName)
 
 	go func() {
+		firstRead := true
+		var lastWithin bool
 	infinite:
 		for {
 			select {
@@ -114,6 +156,7 @@ func (stats *StatisticsCollector) Run() {
 
 					if err == io.EOF {
 						if stats.watch {
+							firstRead = false
 							time.Sleep(100 * time.Millisecond)
 							continue infinite
 						} else {
@@ -125,24 +168,42 @@ func (stats *StatisticsCollector) Run() {
 					}
 				}
 
-				event, err := parser.ParseLine(line)
-
-				if err != nil {
-					log.Printf("Encountered an error while parsing line: %v\n", err)
-					continue infinite
-				}
+				event := parser.ParseLine(line)
 
 				if event == nil {
 					continue infinite
 				}
 
+				// Check timeframe stuff
+				within, timeFrameUser := abstract.WithinTimeFrames(stats.timeFrames, event.Time)
+
+				if firstRead {
+					if (within != lastWithin) && within {
+						stats.lockTheLock()
+						stats.username = timeFrameUser
+						stats.unlockTheLock()
+					}
+
+					if !within {
+						continue infinite
+					}
+				}
+
+				lastWithin = within
+
+				// Grab username from login if detected
 				if login, ok := event.Contents.(*abstract.Login); ok && login != nil {
 					log.Printf("Detected login as %v\n", login.Name)
 					stats.username = login.Name
 					continue infinite
 				}
 
-				log.Println(event)
+				// If username is still empty, try to find it
+				if stats.username == "" {
+					stats.username = stats.FindUsername(event)
+				}
+
+				//log.Println(event)
 
 				stats.lockTheLock()
 

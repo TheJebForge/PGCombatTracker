@@ -15,6 +15,7 @@ import (
 	"github.com/samber/lo"
 	"golang.org/x/exp/shiny/materialdesign/icons"
 	"image"
+	"log"
 )
 
 type StatisticsPage struct {
@@ -22,11 +23,14 @@ type StatisticsPage struct {
 	currentCollector int
 
 	// UI garbage
+	filePath          string
 	modalLayer        *components.ModalLayer
 	backIcon          *widget.Icon
 	backButton        *widget.Clickable
 	resetIcon         *widget.Icon
 	resetButton       *widget.Clickable
+	addIcon           *widget.Icon
+	addButton         *widget.Clickable
 	lockButton        *widget.Clickable
 	lockIcon          *widget.Icon
 	unlockIcon        *widget.Icon
@@ -51,7 +55,7 @@ func getFreshCollectorBody() *widget.List {
 	}
 }
 
-func NewStatisticsPage(state abstract.GlobalState) (*StatisticsPage, error) {
+func NewStatisticsPage(state abstract.GlobalState, filePath string) (*StatisticsPage, error) {
 	backIcon, err := widget.NewIcon(icons.NavigationArrowBack)
 
 	if err != nil {
@@ -59,6 +63,12 @@ func NewStatisticsPage(state abstract.GlobalState) (*StatisticsPage, error) {
 	}
 
 	resetIcon, err := widget.NewIcon(icons.ActionDelete)
+
+	if err != nil {
+		return nil, err
+	}
+
+	addIcon, err := widget.NewIcon(icons.ContentFlag)
 
 	if err != nil {
 		return nil, err
@@ -96,9 +106,12 @@ func NewStatisticsPage(state abstract.GlobalState) (*StatisticsPage, error) {
 	collectorDropdown.SetOptions(options)
 
 	return &StatisticsPage{
+		filePath:          filePath,
 		modalLayer:        components.NewModalLayer(),
 		backIcon:          backIcon,
 		backButton:        &widget.Clickable{},
+		addIcon:           addIcon,
+		addButton:         &widget.Clickable{},
 		resetIcon:         resetIcon,
 		resetButton:       &widget.Clickable{},
 		lockButton:        &widget.Clickable{},
@@ -146,9 +159,16 @@ func windowDragArea(draggable bool) layout.Widget {
 	}
 }
 
-func goBack(state abstract.GlobalState) {
+func (s *StatisticsPage) goBack(state abstract.GlobalState) {
+	markers, err := state.FindMarkers(s.filePath)
+
+	if err != nil {
+		log.Printf("Failed to open markers page: %v\n", err)
+		return
+	}
+
 	state.StatisticsCollector().Close()
-	state.SwitchPage(NewFileSelectionPage())
+	state.SwitchPage(NewMarkersPage(s.filePath, markers))
 }
 
 func (s *StatisticsPage) switchCollectorTab(newIndex int) {
@@ -175,6 +195,8 @@ func (s *StatisticsPage) navBar(state abstract.LayeredState) layout.Widget {
 						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Rigid(navIconButton(state, s.resetButton, s.resetIcon, "Reset").Layout),
 						utils.FlexSpacerW(utils.CommonSpacing),
+						layout.Rigid(navIconButton(state, s.addButton, s.addIcon, "Add").Layout),
+						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							if s.collectorDropdown.Changed() {
 								value := s.collectorDropdown.Value.(CollectorPageIndex)
@@ -188,37 +210,6 @@ func (s *StatisticsPage) navBar(state abstract.LayeredState) layout.Widget {
 							style.DialogTextSize = 12
 
 							return style.Layout(gtx)
-
-							//return material.List(state.Theme(), s.collectorTabs).Layout(
-							//	gtx,
-							//	amount,
-							//	func(gtx layout.Context, index int) layout.Dimensions {
-							//		collector := collectors[index]
-							//		button := s.collectorTabButtons[index]
-							//
-							//		if button.Clicked(gtx) {
-							//			s.switchCollectorTab(index)
-							//		}
-							//
-							//		style := navButton(state, button, collector.TabName())
-							//
-							//		if s.currentCollector != index {
-							//			style.Background = utils.LesserContrastBg
-							//		}
-							//
-							//		if index+1 == amount {
-							//			return style.Layout(gtx)
-							//		} else {
-							//			return layout.Flex{
-							//				Axis: layout.Horizontal,
-							//			}.Layout(
-							//				gtx,
-							//				layout.Rigid(style.Layout),
-							//				utils.FlexSpacerW(utils.CommonSpacing),
-							//			)
-							//		}
-							//	},
-							//)
 						}),
 						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -287,7 +278,27 @@ func (s *StatisticsPage) body(state abstract.LayeredState) layout.Widget {
 
 func (s *StatisticsPage) Layout(ctx layout.Context, state abstract.GlobalState) error {
 	if s.backButton.Clicked(ctx) {
-		goBack(state)
+		s.goBack(state)
+	}
+
+	if s.addButton.Clicked(ctx) {
+		dialog := components.NewInputDialog(
+			state.Theme(),
+			"Create New Marker",
+			"Input name for the marker",
+			"Unnamed",
+			func(marker string) {
+				if stats := state.StatisticsCollector(); stats != nil {
+					if marker == "" {
+						marker = "Unnamed"
+					}
+
+					stats.SaveMarker(state, marker)
+				}
+			},
+		)
+		dialog.TextSize = 12
+		dialog.Open(s.modalLayer)
 	}
 
 	if s.resetButton.Clicked(ctx) {
