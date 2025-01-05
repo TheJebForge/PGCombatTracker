@@ -36,7 +36,7 @@ func SimplifyRadialDistance(points []f32.Point, tolerance float32) []f32.Point {
 	return newPoints
 }
 
-func squaredDistanceToSegment(p, a, b f32.Point) float32 {
+func squaredPerpendicularDistance(p, a, b f32.Point) float32 {
 	x, y := a.X, a.Y
 	dx, dy := b.X-x, b.Y-y
 
@@ -62,7 +62,7 @@ func douglasPeuckerStep(points []f32.Point, start, end int, squaredTolerance flo
 	var index int
 
 	for i := start + 1; i < end; i++ {
-		sqrDistance := squaredDistanceToSegment(points[i], points[start], points[end])
+		sqrDistance := squaredPerpendicularDistance(points[i], points[start], points[end])
 
 		if sqrDistance > maxSquaredDistance {
 			index = i

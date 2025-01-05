@@ -9,7 +9,6 @@ import (
 	"gioui.org/unit"
 	"image"
 	"image/color"
-	"log"
 	"math"
 	"slices"
 	"time"
@@ -50,8 +49,46 @@ type TimeFrame struct {
 	To   time.Time
 }
 
+func (t TimeFrame) Expand(time time.Time) TimeFrame {
+	fromTime := t.From
+	toTime := t.To
+
+	if fromTime.After(time) {
+		fromTime = time
+	}
+
+	if time.After(toTime) {
+		toTime = time
+	}
+
+	return TimeFrame{
+		From: fromTime,
+		To:   toTime,
+	}
+}
+
+func (t TimeFrame) LengthSeconds() float64 {
+	return t.To.Sub(t.From).Seconds()
+}
+
 func (t TimeFrame) Within(time time.Time) bool {
 	return (time.After(t.From) || time.Equal(t.From)) && (time.Before(t.To) || time.Equal(t.To))
+}
+
+type DataRange struct {
+	Min int
+	Max int
+}
+
+func (r DataRange) Expand(value int) DataRange {
+	return DataRange{
+		Min: min(r.Min, value),
+		Max: max(r.Max, value),
+	}
+}
+
+func (r DataRange) Difference() int {
+	return r.Max - r.Min
 }
 
 func NewTimeBasedChart() *TimeBasedChart {
@@ -59,12 +96,15 @@ func NewTimeBasedChart() *TimeBasedChart {
 }
 
 type TimeBasedChart struct {
-	DataPoints    []TimePoint
-	DataTimeFrame TimeFrame
+	DataPoints        []TimePoint
+	DisplayTimeFrame  TimeFrame
+	DisplayValueRange DataRange
 
-	currentPoints []f32.Point
-	dirty         bool
-	lastSize      image.Point
+	CalculatedPoints []f32.Point
+	dirty            bool
+	lastSize         image.Point
+	lastTimeFrame    TimeFrame
+	lastValueRange   DataRange
 }
 
 func (tc *TimeBasedChart) Add(point TimePoint) {
@@ -77,13 +117,18 @@ func (tc *TimeBasedChart) Add(point TimePoint) {
 	length := len(tc.DataPoints)
 
 	if length == 1 {
-		tc.DataTimeFrame = TimeFrame{
+		tc.DisplayTimeFrame = TimeFrame{
 			From: point.Time,
 			To:   point.Time,
 		}
+		tc.DisplayValueRange.Min = point.Value - 1
+		tc.DisplayValueRange.Max = point.Value + 1
 	} else {
-		tc.DataTimeFrame.To = tc.DataPoints[length-1].Time
+		tc.DisplayTimeFrame = tc.DisplayTimeFrame.Expand(point.Time)
+		tc.DisplayValueRange = tc.DisplayValueRange.Expand(point.Value)
 	}
+
+	tc.dirty = true
 }
 
 type FloatXIntY struct {
@@ -92,8 +137,25 @@ type FloatXIntY struct {
 }
 
 func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int) {
+	tc.CalculatedPoints = CalculateTimeChartPoints(
+		tc.DataPoints,
+		tc.DisplayTimeFrame,
+		tc.DisplayValueRange,
+		tolerance,
+		width,
+		height,
+	)
+}
+
+func CalculateTimeChartPoints(
+	dataPoints []TimePoint,
+	timeFrame TimeFrame,
+	valueRange DataRange,
+	tolerance float32,
+	width, height int,
+) []f32.Point {
 	floatingWidth := float64(width)
-	totalTimeFrame := tc.DataTimeFrame.To.Sub(tc.DataTimeFrame.From).Seconds()
+	totalTimeFrame := timeFrame.LengthSeconds()
 
 	// Filter and plot data, but also keep adjacent points
 	var previousPointSet bool
@@ -105,18 +167,15 @@ func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int
 	var filteredData []TimePoint
 	var lastDataInRange bool
 
-	minValue := math.MaxInt
-	maxValue := 0
-
 	var resultPointArray []FloatXIntY
 
-	for _, point := range tc.DataPoints {
-		dataInRange := tc.DataTimeFrame.Within(point.Time)
+	for _, point := range dataPoints {
+		dataInRange := timeFrame.Within(point.Time)
 
 		if dataInRange {
 			filteredData = append(filteredData, point)
 
-			timePosition := point.Time.Sub(tc.DataTimeFrame.From).Seconds()
+			timePosition := point.Time.Sub(timeFrame.From).Seconds()
 			timeFramePosition := timePosition / totalTimeFrame
 			xPosition := floatingWidth * timeFramePosition
 
@@ -129,14 +188,6 @@ func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int
 					Y: value,
 				},
 			)
-
-			if value > maxValue {
-				maxValue = value
-			}
-
-			if value < minValue {
-				minValue = value
-			}
 		}
 
 		if dataInRange != lastDataInRange {
@@ -166,21 +217,11 @@ func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int
 				Y: 0,
 			},
 		)
-		minValue = 0
-		maxValue = 0
 	}
 
 	// Add interpolated versions of points for previous and next
 	if hasPreviousPoint {
-		interpolatedValue := previousPoint.Interpolate(filteredData[0], tc.DataTimeFrame.From).Value
-
-		if interpolatedValue > maxValue {
-			maxValue = interpolatedValue
-		}
-
-		if interpolatedValue < minValue {
-			minValue = interpolatedValue
-		}
+		interpolatedValue := previousPoint.Interpolate(filteredData[0], timeFrame.From).Value
 
 		resultPointArray = slices.Insert(
 			resultPointArray,
@@ -202,15 +243,7 @@ func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int
 	}
 
 	if hasNextPoint {
-		interpolatedValue := filteredData[len(filteredData)-1].Interpolate(nextPoint, tc.DataTimeFrame.To).Value
-
-		if interpolatedValue > maxValue {
-			maxValue = interpolatedValue
-		}
-
-		if interpolatedValue < minValue {
-			minValue = interpolatedValue
-		}
+		interpolatedValue := filteredData[len(filteredData)-1].Interpolate(nextPoint, timeFrame.To).Value
 
 		resultPointArray = append(
 			resultPointArray,
@@ -229,30 +262,27 @@ func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int
 		)
 	}
 
-	resultLength := len(resultPointArray)
-
-	if minValue == maxValue {
-		minValue--
-		maxValue++
-	}
-
 	floatingHeight := float64(height)
-	conversionValue := floatingHeight / float64(maxValue-minValue)
+	conversionValue := floatingHeight / float64(valueRange.Difference())
 
-	tc.currentPoints = make([]f32.Point, resultLength)
-	for i, point := range resultPointArray {
-		valueFromMin := point.Y - minValue
+	var newPoints []f32.Point
+	for _, point := range resultPointArray {
+		valueFromMin := point.Y - valueRange.Min
 		adjustedValue := float64(valueFromMin) * conversionValue
 
-		tc.currentPoints[i] = f32.Point{
-			X: float32(point.X),
-			Y: float32(floatingHeight - adjustedValue),
+		if adjustedValue < 0 || adjustedValue > floatingHeight {
+			continue
 		}
+
+		newPoints = append(newPoints, f32.Point{
+			X: float32(point.X),
+			Y: float32(adjustedValue),
+		})
 	}
 
-	log.Println("before simple", len(tc.currentPoints))
-	tc.currentPoints = utils.SimplifyPoints(tc.currentPoints, tolerance)
-	log.Println("after simple", len(tc.currentPoints))
+	newPoints = utils.SimplifyPoints(newPoints, tolerance)
+
+	return newPoints
 }
 
 func StyleTimeBasedChart(chart *TimeBasedChart) TimeBasedChartStyle {
@@ -260,7 +290,6 @@ func StyleTimeBasedChart(chart *TimeBasedChart) TimeBasedChartStyle {
 		Color:           color.NRGBA{R: 255, G: 255, B: 255, A: 255},
 		Alpha:           140,
 		BackgroundAlpha: 40,
-		Thickness:       10,
 		MinWidth:        300,
 		MinHeight:       100,
 		Inset:           layout.UniformInset(5),
@@ -272,7 +301,6 @@ type TimeBasedChartStyle struct {
 	Color           color.NRGBA
 	Alpha           uint8
 	BackgroundAlpha uint8
-	Thickness       unit.Dp
 
 	MinWidth  unit.Dp
 	MinHeight unit.Dp
@@ -282,7 +310,7 @@ type TimeBasedChartStyle struct {
 	chart *TimeBasedChart
 }
 
-func (ts TimeBasedChartStyle) CheckAndRerender(width, height int) {
+func (ts TimeBasedChartStyle) CheckAndRecalculate(width, height int) {
 	size := image.Point{
 		X: width,
 		Y: height,
@@ -290,6 +318,16 @@ func (ts TimeBasedChartStyle) CheckAndRerender(width, height int) {
 
 	if ts.chart.lastSize != size {
 		ts.chart.lastSize = size
+		ts.chart.dirty = true
+	}
+
+	if ts.chart.lastTimeFrame != ts.chart.DisplayTimeFrame {
+		ts.chart.lastTimeFrame = ts.chart.DisplayTimeFrame
+		ts.chart.dirty = true
+	}
+
+	if ts.chart.lastValueRange != ts.chart.DisplayValueRange {
+		ts.chart.lastValueRange = ts.chart.DisplayValueRange
 		ts.chart.dirty = true
 	}
 
@@ -312,9 +350,9 @@ func (ts TimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensions {
 		size.Y = pxHeight
 	}
 
-	ts.CheckAndRerender(size.X, size.Y)
+	ts.CheckAndRecalculate(size.X, size.Y)
 
-	points := ts.chart.currentPoints
+	points := ts.chart.CalculatedPoints
 
 	defer clip.UniformRRect(image.Rectangle{Max: size}, 10).Push(gtx.Ops).Pop()
 	semiTransparent := ts.Color
@@ -331,13 +369,13 @@ func (ts TimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensions {
 	if len(points) > 0 {
 		path.MoveTo(f32.Point{
 			X: points[0].X,
-			Y: points[0].Y,
+			Y: floatingSizeY - points[0].Y,
 		})
 
 		for i := 1; i < len(points); i++ {
 			path.LineTo(f32.Point{
 				X: points[i].X,
-				Y: points[i].Y,
+				Y: floatingSizeY - points[i].Y,
 			})
 		}
 

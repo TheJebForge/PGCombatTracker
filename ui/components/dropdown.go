@@ -111,7 +111,9 @@ func (d DropdownStyle) dropdownButton() layout.Widget {
 						gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							cgtx := gtx
-							cgtx.Constraints.Max.X = gtx.Dp(d.MaxWidth)
+							if d.MaxWidth > 0 {
+								cgtx.Constraints.Max.X = gtx.Dp(d.MaxWidth)
+							}
 							return material.Label(d.theme, d.TextSize, d.dropdown.Value.String()).Layout(cgtx)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {

@@ -325,7 +325,7 @@ func (s *StatisticsPage) Layout(ctx layout.Context, state abstract.GlobalState) 
 func (s *StatisticsPage) SetupWindow(state abstract.GlobalState) {
 	state.Window().Option(
 		app.Decorated(false),
-		app.MinSize(350, 350),
-		app.Size(350, 350),
+		app.MinSize(380, 350),
+		app.Size(380, 350),
 	)
 }

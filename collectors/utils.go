@@ -158,3 +158,24 @@ func (s subjectChoice) String() string {
 	}
 	return string(s)
 }
+
+type displayChoice uint8
+
+const (
+	DisplayBars displayChoice = iota
+	DisplayPie
+	DisplayGraphs
+)
+
+func (d displayChoice) String() string {
+	switch d {
+	case DisplayBars:
+		return "Bars"
+	case DisplayPie:
+		return "Pie"
+	case DisplayGraphs:
+		return "Graphs"
+	}
+
+	return ""
+}

@@ -27,6 +27,8 @@ type skillDamage struct {
 type subjectiveDamageDealt struct {
 	subject        string
 	totalChart     *components.TimeBasedChart
+	maxRange       components.DataRange
+	stackedChart   *components.StackedTimeBasedChart
 	totalDamage    abstract.Vitals
 	maxDamage      abstract.Vitals
 	indirectDamage abstract.Vitals
@@ -39,11 +41,23 @@ func NewDamageDealtCollector() *DamageDealtCollector {
 		log.Fatalln(err)
 	}
 
+	displayDropdown, err := components.NewDropdown(
+		"Display",
+		DisplayBars,
+		DisplayPie,
+		DisplayGraphs,
+	)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	return &DamageDealtCollector{
 		subjectDropdown: subjectDropdown,
+		displayDropdown: displayDropdown,
 		longFormatBool:  &widget.Bool{},
 		total: subjectiveDamageDealt{
-			totalChart: components.NewTimeBasedChart(),
+			totalChart:   components.NewTimeBasedChart(),
+			stackedChart: components.NewStackedTimeBasedChart(),
 		},
 	}
 }
@@ -53,7 +67,10 @@ type DamageDealtCollector struct {
 	total          subjectiveDamageDealt
 	subjects       []subjectiveDamageDealt
 
+	currentDisplay displayChoice
+
 	subjectDropdown *components.Dropdown
+	displayDropdown *components.Dropdown
 	longFormatBool  *widget.Bool
 }
 
@@ -69,18 +86,21 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 	findSkillDamage := func(skill skillDamage) bool {
 		return skill.name == skillName
 	}
-	createSkillDamage := func() skillDamage {
-		chart := components.NewTimeBasedChart()
-		chart.Add(components.TimePoint{
-			Time:  event.Time,
-			Value: skillUse.Damage.Total(),
-		})
-		return skillDamage{
-			name:     skillName,
-			amount:   1,
-			damage:   *skillUse.Damage,
-			lastUsed: event.Time,
-			chart:    chart,
+	createSkillDamage := func(subject subjectiveDamageDealt) func() skillDamage {
+		return func() skillDamage {
+			chart := components.NewTimeBasedChart()
+			chart.Add(components.TimePoint{
+				Time:  event.Time,
+				Value: skillUse.Damage.Total(),
+			})
+			subject.stackedChart.Add(chart, skillName)
+			return skillDamage{
+				name:     skillName,
+				amount:   1,
+				damage:   *skillUse.Damage,
+				lastUsed: event.Time,
+				chart:    chart,
+			}
 		}
 	}
 	updateSkillDamage := func(skill skillDamage) skillDamage {
@@ -112,10 +132,11 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 	d.total.skillDamage = utils.CreateUpdate(
 		d.total.skillDamage,
 		findSkillDamage,
-		createSkillDamage,
+		createSkillDamage(d.total),
 		updateSkillDamage,
 	)
 	d.total.maxDamage = slices.MaxFunc(d.total.skillDamage, skillDamageMax).damage
+	d.total.maxRange = d.total.maxRange.Expand(d.total.maxDamage.Total())
 
 	slices.SortFunc(d.total.skillDamage, skillDamageSort)
 
@@ -131,14 +152,23 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 				Time:  event.Time,
 				Value: skillUse.Damage.Total(),
 			})
-			return subjectiveDamageDealt{
+
+			subject := subjectiveDamageDealt{
 				subject:     skillUse.Subject,
 				totalDamage: *skillUse.Damage,
-				skillDamage: []skillDamage{
-					createSkillDamage(),
+				maxDamage:   *skillUse.Damage,
+				maxRange: components.DataRange{
+					Max: skillUse.Damage.Total(),
 				},
-				totalChart: chart,
+				totalChart:   chart,
+				stackedChart: components.NewStackedTimeBasedChart(),
 			}
+
+			subject.skillDamage = []skillDamage{
+				createSkillDamage(subject)(),
+			}
+
+			return subject
 		},
 		func(subject subjectiveDamageDealt) subjectiveDamageDealt {
 			subject.totalDamage = subject.totalDamage.Add(*skillUse.Damage)
@@ -150,10 +180,11 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 			subject.skillDamage = utils.CreateUpdate(
 				subject.skillDamage,
 				findSkillDamage,
-				createSkillDamage,
+				createSkillDamage(subject),
 				updateSkillDamage,
 			)
 			subject.maxDamage = slices.MaxFunc(subject.skillDamage, skillDamageMax).damage
+			subject.maxRange = subject.maxRange.Expand(subject.maxDamage.Total())
 
 			slices.SortFunc(subject.skillDamage, skillDamageSort)
 
@@ -185,7 +216,8 @@ func (d *DamageDealtCollector) ingestIndirect(event *abstract.ChatEvent) {
 func (d *DamageDealtCollector) Reset() {
 	d.subjects = nil
 	d.total = subjectiveDamageDealt{
-		totalChart: components.NewTimeBasedChart(),
+		totalChart:   components.NewTimeBasedChart(),
+		stackedChart: components.NewStackedTimeBasedChart(),
 	}
 	d.subjectDropdown.SetOptions([]fmt.Stringer{subjectChoice("")})
 	d.currentSubject = ""
@@ -252,20 +284,42 @@ func (d *DamageDealtCollector) UI(state abstract.LayeredState) (layout.Widget, [
 		d.currentSubject = string(d.subjectDropdown.Value.(subjectChoice))
 	}
 
+	if d.displayDropdown.Changed() {
+		d.currentDisplay = d.displayDropdown.Value.(displayChoice)
+	}
+
 	topWidget := topBarSurface(func(gtx layout.Context) layout.Dimensions {
 		if d.longFormatBool.Update(gtx) {
 			gtx.Source.Execute(op.InvalidateCmd{})
 		}
 
 		return layout.Flex{
-			Axis:      layout.Horizontal,
-			Alignment: layout.Middle,
+			Axis: layout.Vertical,
 		}.Layout(
 			gtx,
-			layout.Rigid(defaultDropdownStyle(state, d.subjectDropdown).Layout),
-			utils.FlexSpacerW(utils.CommonSpacing),
-			layout.Rigid(defaultCheckboxStyle(state, d.longFormatBool, "Use long numbers").Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return components.HorizontalWrap{
+					Alignment:   layout.Middle,
+					Spacing:     utils.CommonSpacing * 2,
+					LineSpacing: utils.CommonSpacing,
+				}.Layout(
+					gtx,
+					defaultDropdownStyle(state, d.subjectDropdown).Layout,
+					defaultCheckboxStyle(state, d.longFormatBool, "Use long numbers").Layout,
+					defaultDropdownStyle(state, d.displayDropdown).Layout,
+				)
+			}),
+			utils.FlexSpacerH(utils.CommonSpacing),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{
+					Axis:      layout.Horizontal,
+					Alignment: layout.Middle,
+				}.Layout(
+					gtx,
+				)
+			}),
 		)
+
 	})
 
 	var widgets []layout.Widget
@@ -278,73 +332,101 @@ func (d *DamageDealtCollector) UI(state abstract.LayeredState) (layout.Widget, [
 		}
 	}
 
-	//var maxDamage = subject.maxDamage.Total()
+	switch d.currentDisplay {
+	case DisplayBars:
+		var maxDamage = subject.maxDamage.Total()
 
-	//widgets = append(widgets, func(gtx layout.Context) layout.Dimensions {
-	//	return layout.Flex{
-	//		Axis: layout.Vertical,
-	//	}.Layout(
-	//		gtx,
-	//		layout.Rigid(components.StyleTimeBasedChart(subject.totalChart).Layout),
-	//		utils.FlexSpacerH(utils.CommonSpacing),
-	//		layout.Rigid(d.drawBar(
-	//			state,
-	//			skillDamage{
-	//				name:   "Total Damage",
-	//				amount: 0,
-	//				damage: subject.totalDamage,
-	//			},
-	//			maxDamage,
-	//			25,
-	//		)),
-	//	)
-	//})
+		widgets = append(widgets, d.drawBar(
+			state,
+			skillDamage{
+				name:   "Total Damage",
+				amount: 0,
+				damage: subject.totalDamage,
+			},
+			maxDamage,
+			25,
+		))
 
-	log.Println("screen update")
+		for _, skill := range subject.skillDamage {
+			widgets = append(widgets, d.drawBar(state, skill, maxDamage, 40))
+		}
 
-	totalChartStyle := components.StyleTimeBasedChart(subject.totalChart)
-	totalChartStyle.Color = components.StringToColor("Total Damage")
+		widgets = append(widgets, d.drawBar(
+			state,
+			skillDamage{
+				name:   "Indirect Damage",
+				amount: 0,
+				damage: subject.indirectDamage,
+			},
+			subject.indirectDamage.Total(),
+			25,
+		))
+	case DisplayPie:
+		widgets = append(widgets, func(gtx layout.Context) layout.Dimensions {
+			totalValue := subject.totalDamage.Total()
 
-	widgets = append(widgets, d.drawWidget(
-		state,
-		skillDamage{
-			name:   "Total Damage",
-			amount: 0,
-			damage: subject.totalDamage,
-		},
-		totalChartStyle.Layout,
-		100,
-	))
+			pieItems := make([]components.PieChartItem, len(subject.skillDamage))
+			for i, skill := range subject.skillDamage {
+				pieItems[i] = components.PieChartItem{
+					Name:    skill.name,
+					Value:   skill.damage.Total(),
+					SubText: skill.damage.StringCL(d.longFormatBool.Value),
+				}
+			}
 
-	for _, skill := range subject.skillDamage {
-		skill.chart.DataTimeFrame = subject.totalChart.DataTimeFrame
-		chartStyle := components.StyleTimeBasedChart(skill.chart)
-		chartStyle.Color = components.StringToColor(skill.name)
+			style := components.StylePieChart(state.Theme())
+			style.TextSize = 12
 
-		//widgets = append(widgets, func(gtx layout.Context) layout.Dimensions {
-		//	return layout.Flex{
-		//		Axis: layout.Vertical,
-		//	}.Layout(
-		//		gtx,
-		//		layout.Rigid(chartStyle.Layout),
-		//		utils.FlexSpacerH(utils.CommonSpacing),
-		//		layout.Rigid(d.drawBar(state, skill, maxDamage, 40)),
-		//	)
-		//})
+			return style.Layout(
+				gtx,
+				totalValue,
+				pieItems...,
+			)
+		})
+	case DisplayGraphs:
+		totalChartStyle := components.StyleTimeBasedChart(subject.totalChart)
+		totalChartStyle.Color = components.StringToColor("Total Damage")
 
-		widgets = append(widgets, d.drawWidget(state, skill, chartStyle.Layout, 100))
+		widgets = append(widgets, d.drawWidget(
+			state,
+			skillDamage{
+				name:   "Total Damage",
+				amount: 0,
+				damage: subject.totalDamage,
+			},
+			totalChartStyle.Layout,
+			100,
+		))
+
+		subject.stackedChart.DisplayTimeFrame = subject.totalChart.DisplayTimeFrame
+		subject.stackedChart.DisplayValueRange = subject.totalChart.DisplayValueRange
+
+		stackedStyle := components.StyleStackedTimeBasedChart(state.Theme(), subject.stackedChart)
+		stackedStyle.Alpha = 255
+		stackedStyle.MinHeight = 150
+		stackedStyle.TextSize = 12
+		widgets = append(widgets, stackedStyle.Layout)
+
+		for _, skill := range subject.skillDamage {
+			skill.chart.DisplayTimeFrame = subject.totalChart.DisplayTimeFrame
+			skill.chart.DisplayValueRange = subject.maxRange
+			chartStyle := components.StyleTimeBasedChart(skill.chart)
+			chartStyle.Color = components.StringToColor(skill.name)
+
+			//widgets = append(widgets, func(gtx layout.Context) layout.Dimensions {
+			//	return layout.Flex{
+			//		Axis: layout.Vertical,
+			//	}.Layout(
+			//		gtx,
+			//		layout.Rigid(chartStyle.Layout),
+			//		utils.FlexSpacerH(utils.CommonSpacing),
+			//		layout.Rigid(d.drawBar(state, skill, maxDamage, 40)),
+			//	)
+			//})
+
+			widgets = append(widgets, d.drawWidget(state, skill, chartStyle.Layout, 100))
+		}
 	}
-
-	widgets = append(widgets, d.drawBar(
-		state,
-		skillDamage{
-			name:   "Indirect Damage",
-			amount: 0,
-			damage: subject.indirectDamage,
-		},
-		subject.indirectDamage.Total(),
-		25,
-	))
 
 	return topWidget, widgets
 }
