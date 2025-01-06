@@ -127,7 +127,7 @@ func (s *SettingsPage) reflectField(state abstract.GlobalState, field reflect.Va
 			return editorLine(
 				gtx,
 				state.Theme(),
-				name,
+				normalizedName,
 				styledEditor(state.Theme(), editor, "Empty").Layout,
 			)
 		}
@@ -155,7 +155,7 @@ func (s *SettingsPage) reflectField(state abstract.GlobalState, field reflect.Va
 			return editorLine(
 				gtx,
 				state.Theme(),
-				name,
+				normalizedName,
 				func(gtx layout.Context) layout.Dimensions {
 					style := styledEditor(state.Theme(), editor, "Empty")
 
@@ -193,7 +193,45 @@ func (s *SettingsPage) reflectField(state abstract.GlobalState, field reflect.Va
 			return editorLine(
 				gtx,
 				state.Theme(),
-				name,
+				normalizedName,
+				func(gtx layout.Context) layout.Dimensions {
+					style := styledEditor(state.Theme(), editor, "Empty")
+
+					if invalid {
+						style.Color = utils.RedText
+					} else {
+						style.Color = state.Theme().Fg
+					}
+
+					return style.Layout(gtx)
+				},
+			)
+		}
+	case reflect.Float64:
+		editor := &widget.Editor{
+			SingleLine: true,
+		}
+		editor.SetText(strconv.FormatFloat(field.Float(), 'f', -1, 64))
+		invalid := false
+
+		return func(gtx layout.Context) layout.Dimensions {
+			if _, ok := editor.Update(gtx); ok {
+				num, err := strconv.ParseFloat(editor.Text(), 64)
+
+				if err != nil {
+					invalid = true
+				} else {
+					invalid = false
+
+					field.SetFloat(num)
+					state.SaveSettings()
+				}
+			}
+
+			return editorLine(
+				gtx,
+				state.Theme(),
+				normalizedName,
 				func(gtx layout.Context) layout.Dimensions {
 					style := styledEditor(state.Theme(), editor, "Empty")
 

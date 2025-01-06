@@ -12,6 +12,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"time"
 )
 
 type healing struct {
@@ -166,6 +167,10 @@ func (h *HealingCollector) ingestRecovered(info abstract.StatisticsInformation, 
 		processHealingWithMax(&h.enemyTypes, group)
 		processHealingWithMax(&h.allWithEnemyTypes, group)
 	}
+}
+
+func (h *HealingCollector) Tick(info abstract.StatisticsInformation, at time.Time) {
+
 }
 
 func (h *HealingCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {

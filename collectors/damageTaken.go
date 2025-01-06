@@ -13,6 +13,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"time"
 )
 
 type enemyDamage struct {
@@ -249,6 +250,10 @@ func (d *DamageTakenCollector) isVictimValuable(info abstract.StatisticsInformat
 	}
 
 	return false
+}
+
+func (d *DamageTakenCollector) Tick(info abstract.StatisticsInformation, at time.Time) {
+
 }
 
 func (d *DamageTakenCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {

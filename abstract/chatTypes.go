@@ -129,10 +129,24 @@ func (event Vitals) Total() int {
 	return event.Health + event.Armor + event.Power
 }
 
-// StringCL Format vitals as conditionally long number
 // StringCL Format vitals as conditionally long numbers
 func (event Vitals) StringCL(long bool) string {
 	return utils.ConditionalDamageLabel(event.Health, event.Armor, event.Power, long)
+}
+func (event Vitals) Interpolate(other utils.Interpolatable, t float64) utils.Interpolatable {
+	otherVital, ok := other.(Vitals)
+	if !ok {
+		return other
+	}
+
+	return Vitals{
+		Health: max(0, utils.LerpInt(event.Health, otherVital.Health, t)),
+		Armor:  max(0, utils.LerpInt(event.Armor, otherVital.Armor, t)),
+		Power:  max(0, utils.LerpInt(event.Power, otherVital.Power, t)),
+	}
+}
+func (event Vitals) InterpolateILF(other utils.InterpolatableLongFormatable, t float64) utils.InterpolatableLongFormatable {
+	return event.Interpolate(other, t).(utils.InterpolatableLongFormatable)
 }
 
 func (event *Recovered) ImplementsChatContent() {}

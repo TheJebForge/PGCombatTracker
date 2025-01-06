@@ -8,6 +8,7 @@ import (
 	"gioui.org/layout"
 	"log"
 	"strings"
+	"time"
 )
 
 type subjectiveMisc struct {
@@ -88,6 +89,10 @@ func (m *MiscCollector) isAlly(info abstract.StatisticsInformation, subject, ski
 	}
 
 	return false
+}
+
+func (m *MiscCollector) Tick(info abstract.StatisticsInformation, at time.Time) {
+
 }
 
 func (m *MiscCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {

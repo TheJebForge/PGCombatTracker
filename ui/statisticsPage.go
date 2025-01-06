@@ -263,6 +263,7 @@ func (s *StatisticsPage) body(state abstract.LayeredState) layout.Widget {
 		}.Layout(
 			gtx,
 			layout.Rigid(top),
+			utils.FlexSpacerH(utils.CommonSpacing),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return material.List(state.Theme(), s.collectorBody).Layout(
 					gtx,

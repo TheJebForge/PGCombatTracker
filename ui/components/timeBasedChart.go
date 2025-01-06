@@ -3,10 +3,14 @@ package components
 import (
 	"PGCombatTracker/utils"
 	"gioui.org/f32"
+	"gioui.org/io/event"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
+	"gioui.org/widget/material"
 	"image"
 	"image/color"
 	"math"
@@ -15,8 +19,9 @@ import (
 )
 
 type TimePoint struct {
-	Time  time.Time
-	Value int
+	Time    time.Time
+	Value   int
+	Details utils.InterpolatableLongFormatable
 }
 
 func (t TimePoint) Interpolate(other TimePoint, interpolant time.Time) TimePoint {
@@ -67,6 +72,26 @@ func (t TimeFrame) Expand(time time.Time) TimeFrame {
 	}
 }
 
+func (t TimeFrame) ProportionOfTarget(target time.Time) float64 {
+	if target.Before(t.From) {
+		return 0
+	} else if target.After(t.To) {
+		return 1
+	}
+
+	timeWidth := t.LengthSeconds()
+	secondsFromLeft := target.Sub(t.From).Seconds()
+	return secondsFromLeft / timeWidth
+}
+
+func (t TimeFrame) TimeAtProportion(target float64) time.Time {
+	timeWidth := t.LengthSeconds()
+	targetSeconds := timeWidth * target
+	return t.From.Add(
+		time.Microsecond * time.Duration(math.Round(targetSeconds*1000000)),
+	)
+}
+
 func (t TimeFrame) LengthSeconds() float64 {
 	return t.To.Sub(t.From).Seconds()
 }
@@ -91,20 +116,32 @@ func (r DataRange) Difference() int {
 	return r.Max - r.Min
 }
 
-func NewTimeBasedChart() *TimeBasedChart {
-	return &TimeBasedChart{}
+func NewTimeBasedChart(name string) *TimeBasedChart {
+	return &TimeBasedChart{
+		Name: name,
+	}
 }
 
 type TimeBasedChart struct {
 	DataPoints        []TimePoint
 	DisplayTimeFrame  TimeFrame
 	DisplayValueRange DataRange
+	Name              string
 
 	CalculatedPoints []f32.Point
 	dirty            bool
 	lastSize         image.Point
 	lastTimeFrame    TimeFrame
 	lastValueRange   DataRange
+
+	hoveredPoint  *TimePoint
+	hoveredPointX int
+	hoverPosition image.Point
+	hoverBounds   f32.Point
+
+	// Pointer tracking stuff
+	pid     pointer.ID
+	hovered bool
 }
 
 func (tc *TimeBasedChart) Add(point TimePoint) {
@@ -113,6 +150,12 @@ func (tc *TimeBasedChart) Add(point TimePoint) {
 	slices.SortFunc(tc.DataPoints, func(a, b TimePoint) int {
 		return a.Time.Compare(b.Time)
 	})
+
+	tc.dirty = true
+}
+
+func (tc *TimeBasedChart) AddWithBounds(point TimePoint) {
+	tc.Add(point)
 
 	length := len(tc.DataPoints)
 
@@ -127,8 +170,6 @@ func (tc *TimeBasedChart) Add(point TimePoint) {
 		tc.DisplayTimeFrame = tc.DisplayTimeFrame.Expand(point.Time)
 		tc.DisplayValueRange = tc.DisplayValueRange.Expand(point.Value)
 	}
-
-	tc.dirty = true
 }
 
 type FloatXIntY struct {
@@ -147,6 +188,85 @@ func (tc *TimeBasedChart) RecalculatePoints(tolerance float32, width, height int
 	)
 }
 
+func ValueAtTime(points []TimePoint, target time.Time) int {
+	pointsLength := len(points)
+
+	if pointsLength == 0 {
+		return 0
+	} else if pointsLength == 1 {
+		return points[0].Value
+	} else {
+		previousPoint := points[0]
+
+		for i := 1; i < pointsLength; i++ {
+			point := points[i]
+
+			// Interpolate between previous point and current point to get Y value
+			if target.Before(point.Time) {
+				secondsDifference := point.Time.Sub(previousPoint.Time).Seconds()
+
+				// There's no point to interpolate as there's no distance between points
+				if secondsDifference == 0 {
+					return point.Value
+				}
+
+				secondsOffset := target.Sub(previousPoint.Time).Seconds()
+				proportion := secondsOffset / secondsDifference
+
+				verticalDifference := float64(point.Value - previousPoint.Value)
+				interpolatedDifference := int(math.Round(verticalDifference * proportion))
+
+				return previousPoint.Value + interpolatedDifference
+			}
+
+			previousPoint = point
+		}
+
+		// Target is outside of data range
+		return previousPoint.Value
+	}
+}
+
+func ClosestPointToTarget(points []TimePoint, target time.Time) (TimePoint, int) {
+	pointsLength := len(points)
+
+	if pointsLength == 0 {
+		return TimePoint{}, -1
+	} else if pointsLength == 1 {
+		return points[0], 0
+	} else {
+		previousPoint := points[0]
+
+		for i := 1; i < pointsLength; i++ {
+			point := points[i]
+
+			// Select point based on proximity
+			if target.Before(point.Time) {
+				secondsDifference := point.Time.Sub(previousPoint.Time).Seconds()
+
+				// There's no point to interpolate as there's no distance between points
+				if secondsDifference == 0 {
+					return point, i
+				}
+
+				secondsOffset := target.Sub(previousPoint.Time).Seconds()
+				proportion := secondsOffset / secondsDifference
+
+				if proportion > .5 {
+					return point, i
+				} else {
+					return previousPoint, i - 1
+				}
+			}
+
+			previousPoint = point
+		}
+
+		// Target is outside of data range
+		return previousPoint, pointsLength - 1
+	}
+}
+
 func CalculateTimeChartPoints(
 	dataPoints []TimePoint,
 	timeFrame TimeFrame,
@@ -157,17 +277,14 @@ func CalculateTimeChartPoints(
 	floatingWidth := float64(width)
 	totalTimeFrame := timeFrame.LengthSeconds()
 
-	// Filter and plot data, but also keep adjacent points
-	var previousPointSet bool
-	var hasPreviousPoint bool
-	var previousPoint TimePoint
-	var hasNextPoint bool
-	var nextPoint TimePoint
-
+	// Filter and plot data
 	var filteredData []TimePoint
-	var lastDataInRange bool
-
-	var resultPointArray []FloatXIntY
+	resultPointArray := []FloatXIntY{
+		{
+			X: 0,
+			Y: ValueAtTime(dataPoints, timeFrame.From),
+		},
+	}
 
 	for _, point := range dataPoints {
 		dataInRange := timeFrame.Within(point.Time)
@@ -189,78 +306,15 @@ func CalculateTimeChartPoints(
 				},
 			)
 		}
-
-		if dataInRange != lastDataInRange {
-			if dataInRange {
-				if previousPointSet {
-					hasPreviousPoint = true
-				}
-			} else {
-				nextPoint = point
-				hasNextPoint = true
-			}
-		} else {
-			if !hasPreviousPoint {
-				previousPoint = point
-				previousPointSet = true
-			}
-		}
-
-		lastDataInRange = dataInRange
 	}
 
-	if len(resultPointArray) <= 0 {
-		resultPointArray = append(
-			resultPointArray,
-			FloatXIntY{
-				X: floatingWidth / 2,
-				Y: 0,
-			},
-		)
-	}
-
-	// Add interpolated versions of points for previous and next
-	if hasPreviousPoint {
-		interpolatedValue := previousPoint.Interpolate(filteredData[0], timeFrame.From).Value
-
-		resultPointArray = slices.Insert(
-			resultPointArray,
-			0,
-			FloatXIntY{
-				X: 0,
-				Y: interpolatedValue,
-			},
-		)
-	} else {
-		resultPointArray = slices.Insert(
-			resultPointArray,
-			0,
-			FloatXIntY{
-				X: 0,
-				Y: resultPointArray[0].Y,
-			},
-		)
-	}
-
-	if hasNextPoint {
-		interpolatedValue := filteredData[len(filteredData)-1].Interpolate(nextPoint, timeFrame.To).Value
-
-		resultPointArray = append(
-			resultPointArray,
-			FloatXIntY{
-				X: floatingWidth,
-				Y: interpolatedValue,
-			},
-		)
-	} else {
-		resultPointArray = append(
-			resultPointArray,
-			FloatXIntY{
-				X: floatingWidth,
-				Y: resultPointArray[len(resultPointArray)-1].Y,
-			},
-		)
-	}
+	resultPointArray = append(
+		resultPointArray,
+		FloatXIntY{
+			X: floatingWidth,
+			Y: ValueAtTime(dataPoints, timeFrame.To),
+		},
+	)
 
 	floatingHeight := float64(height)
 	conversionValue := floatingHeight / float64(valueRange.Difference())
@@ -285,15 +339,17 @@ func CalculateTimeChartPoints(
 	return newPoints
 }
 
-func StyleTimeBasedChart(chart *TimeBasedChart) TimeBasedChartStyle {
+func StyleTimeBasedChart(theme *material.Theme, chart *TimeBasedChart) TimeBasedChartStyle {
 	return TimeBasedChartStyle{
 		Color:           color.NRGBA{R: 255, G: 255, B: 255, A: 255},
 		Alpha:           140,
 		BackgroundAlpha: 40,
+		TooltipTextSize: 10,
 		MinWidth:        300,
 		MinHeight:       100,
 		Inset:           layout.UniformInset(5),
 		chart:           chart,
+		theme:           theme,
 	}
 }
 
@@ -302,11 +358,15 @@ type TimeBasedChartStyle struct {
 	Alpha           uint8
 	BackgroundAlpha uint8
 
+	TooltipTextSize unit.Sp
+	LongFormat      bool
+
 	MinWidth  unit.Dp
 	MinHeight unit.Dp
 
 	Inset layout.Inset
 
+	theme *material.Theme
 	chart *TimeBasedChart
 }
 
@@ -332,12 +392,123 @@ func (ts TimeBasedChartStyle) CheckAndRecalculate(width, height int) {
 	}
 
 	if ts.chart.dirty {
-		ts.chart.RecalculatePoints(0.5, width, height)
+		ts.chart.hoverBounds = f32.Point{}
+		ts.chart.RecalculatePoints(0.1, width, height)
 		ts.chart.dirty = false
 	}
 }
 
+func (ts TimeBasedChartStyle) update(gtx layout.Context) {
+	ch := ts.chart
+	for {
+		ev, ok := gtx.Source.Event(pointer.Filter{
+			Target: ts.chart,
+			Kinds:  pointer.Enter | pointer.Move | pointer.Leave | pointer.Cancel,
+		})
+		if !ok {
+			break
+		}
+		e, ok := ev.(pointer.Event)
+		if !ok {
+			continue
+		}
+
+		switch e.Kind {
+		case pointer.Leave, pointer.Cancel:
+			if ch.hovered && ch.pid == e.PointerID {
+				ch.hovered = false
+				ch.hoveredPoint = nil
+				ch.hoverBounds = f32.Point{}
+			}
+		case pointer.Enter:
+			if !ch.hovered {
+				ch.pid = e.PointerID
+			}
+
+			if ch.pid == e.PointerID {
+				ch.hovered = true
+			}
+		case pointer.Move:
+			if ch.pid == e.PointerID {
+				ch.hoverPosition = e.Position.Round()
+
+				if e.Position.X > ch.hoverBounds.X && e.Position.X < ch.hoverBounds.Y {
+					continue
+				}
+
+				pointsLength := len(ch.DataPoints)
+
+				floatingWidth := float64(ch.lastSize.X)
+
+				cursorProportion := float64(e.Position.X) / floatingWidth
+				cursorTime := ch.DisplayTimeFrame.TimeAtProportion(cursorProportion)
+				closestPoint, pointIndex := ClosestPointToTarget(ch.DataPoints, cursorTime)
+				pointPosition := floatingWidth * ch.DisplayTimeFrame.ProportionOfTarget(closestPoint.Time)
+
+				ch.hoveredPointX = int(math.Round(pointPosition))
+				ch.hoveredPoint = &closestPoint
+
+				// Set the bounds that will make the hover change, so we don't do expensive shit on every mouse move
+				if pointsLength <= 1 {
+					ch.hoverBounds = f32.Point{
+						X: 0,
+						Y: float32(floatingWidth),
+					}
+				} else {
+					// Set left bound
+					if pointIndex <= 0 {
+						ch.hoverBounds.X = 0
+					} else {
+						leftIndex := pointIndex - 1
+						leftProportion := ch.DisplayTimeFrame.ProportionOfTarget(ch.DataPoints[leftIndex].Time)
+						leftPosition := floatingWidth * leftProportion
+						leftBound := (pointPosition-leftPosition)/2 + leftPosition
+						ch.hoverBounds.X = float32(leftBound)
+					}
+
+					// Set right bound
+					if pointIndex >= pointsLength-1 {
+						ch.hoverBounds.Y = float32(floatingWidth)
+					} else {
+						rightIndex := pointIndex + 1
+						rightProportion := ch.DisplayTimeFrame.ProportionOfTarget(ch.DataPoints[rightIndex].Time)
+						rightPosition := floatingWidth * rightProportion
+						rightBound := (rightPosition-pointPosition)/2 + pointPosition
+						ch.hoverBounds.Y = float32(rightBound)
+					}
+				}
+			}
+		default:
+		}
+	}
+}
+
+func (ts TimeBasedChartStyle) tooltip(point TimePoint) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		return layout.Background{}.Layout(
+			gtx,
+			utils.MakeRoundedBG(10, utils.SecondBG),
+			func(gtx layout.Context) layout.Dimensions {
+				return layout.UniformInset(utils.CommonSpacing).Layout(
+					gtx,
+					func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{
+							Axis: layout.Vertical,
+						}.Layout(
+							gtx,
+							layout.Rigid(material.Label(ts.theme, ts.TooltipTextSize, point.Time.Format(time.DateTime)).Layout),
+							layout.Rigid(material.Label(ts.theme, ts.TooltipTextSize, point.Details.StringCL(ts.LongFormat)).Layout),
+						)
+					},
+				)
+			},
+		)
+	}
+}
+
 func (ts TimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensions {
+	ts.update(gtx)
+
 	size := gtx.Constraints.Min
 
 	pxWidth := gtx.Dp(ts.MinWidth)
@@ -357,6 +528,7 @@ func (ts TimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensions {
 	defer clip.UniformRRect(image.Rectangle{Max: size}, 10).Push(gtx.Ops).Pop()
 	semiTransparent := ts.Color
 	semiTransparent.A = ts.BackgroundAlpha
+	event.Op(gtx.Ops, ts.chart)
 	paint.Fill(gtx.Ops, semiTransparent)
 
 	path := clip.Path{}
@@ -398,6 +570,57 @@ func (ts TimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensions {
 	paint.FillShape(gtx.Ops, areaColor, clip.Outline{
 		Path: path.End(),
 	}.Op())
+
+	if ts.chart.hoveredPoint != nil {
+		spacing := gtx.Dp(utils.CommonSpacing)
+		hoverPosition := ts.chart.hoverPosition
+		hoverX := ts.chart.hoveredPointX
+		floatingHoverX := float32(hoverX)
+
+		// Draw line
+		line := clip.Path{}
+		line.Begin(gtx.Ops)
+
+		line.MoveTo(f32.Point{
+			X: floatingHoverX,
+			Y: 0,
+		})
+		line.LineTo(f32.Point{
+			X: floatingHoverX,
+			Y: float32(size.Y),
+		})
+
+		paint.FillShape(gtx.Ops, color.NRGBA{
+			R: 255, G: 255, B: 255, A: 20,
+		}, clip.Stroke{
+			Path:  line.End(),
+			Width: 2,
+		}.Op())
+
+		// Draw tooltip
+		cgtx := gtx
+		cgtx.Constraints.Min = image.Point{}
+
+		tooltipMacro := op.Record(gtx.Ops)
+		tooltipDims := ts.tooltip(*ts.chart.hoveredPoint)(cgtx)
+		tooltipCall := tooltipMacro.Stop()
+
+		xOffset := spacing * 2
+		if hoverPosition.X+spacing*3+tooltipDims.Size.X > size.X {
+			xOffset = -(tooltipDims.Size.X + spacing*2)
+		}
+		tooltipX := hoverPosition.X + xOffset
+
+		yOffset := min(spacing*2, size.Y-(hoverPosition.Y+tooltipDims.Size.Y+spacing))
+		tooltipY := hoverPosition.Y + yOffset
+
+		trans := op.Offset(image.Point{
+			X: tooltipX,
+			Y: tooltipY,
+		}).Push(gtx.Ops)
+		tooltipCall.Add(gtx.Ops)
+		trans.Pop()
+	}
 
 	return layout.Dimensions{
 		Size: size,

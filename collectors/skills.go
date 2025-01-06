@@ -239,6 +239,10 @@ func (s *SkillsCollector) ingestSkillUse(info abstract.StatisticsInformation, ev
 	))
 }
 
+func (s *SkillsCollector) Tick(info abstract.StatisticsInformation, at time.Time) {
+
+}
+
 func (s *SkillsCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {
 	if _, ok := event.Contents.(*abstract.SkillUse); ok {
 		s.ingestSkillUse(info, event)

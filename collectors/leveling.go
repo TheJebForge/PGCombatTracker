@@ -12,6 +12,7 @@ import (
 	"gioui.org/widget"
 	"log"
 	"slices"
+	"time"
 )
 
 type skillXP struct {
@@ -55,6 +56,10 @@ func (l *LevelingCollector) Reset() {
 	l.subjects = nil
 	l.subjectDropdown.SetOptions([]fmt.Stringer{subjectChoice("")})
 	l.currentSubject = ""
+}
+
+func (l *LevelingCollector) Tick(info abstract.StatisticsInformation, at time.Time) {
+
 }
 
 func (l *LevelingCollector) Collect(info abstract.StatisticsInformation, event *abstract.ChatEvent) error {

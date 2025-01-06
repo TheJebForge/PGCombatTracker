@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"io"
 	"log"
+	"math"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -139,6 +140,21 @@ func (stats *StatisticsCollector) Run() {
 
 	log.Printf("Starting to read file at '%v'\n", fileName)
 
+	var nextTick time.Time
+	tickIntervalDuration := time.Microsecond * time.Duration(math.Round(stats.settings.TickIntervalSeconds*1000000))
+
+	tickIfNeeded := func(at time.Time) {
+		for nextTick.Before(at) {
+			stats.lockTheLock()
+
+			for _, collector := range stats.collectors {
+				collector.Tick(stats, nextTick)
+			}
+
+			nextTick = nextTick.Add(tickIntervalDuration)
+		}
+	}
+
 	go func() {
 		firstRead := true
 		var lastWithin bool
@@ -156,6 +172,7 @@ func (stats *StatisticsCollector) Run() {
 
 					if err == io.EOF {
 						if stats.watch {
+							tickIfNeeded(time.Now())
 							firstRead = false
 							time.Sleep(100 * time.Millisecond)
 							continue infinite
@@ -172,6 +189,10 @@ func (stats *StatisticsCollector) Run() {
 
 				if event == nil {
 					continue infinite
+				}
+
+				if nextTick.IsZero() {
+					nextTick = event.Time
 				}
 
 				// Check timeframe stuff
@@ -206,6 +227,7 @@ func (stats *StatisticsCollector) Run() {
 				//log.Println(event)
 
 				stats.lockTheLock()
+				tickIfNeeded(event.Time)
 
 				for _, collector := range stats.collectors {
 					err = collector.Collect(stats, event)

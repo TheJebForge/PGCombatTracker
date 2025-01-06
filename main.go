@@ -5,7 +5,6 @@ import (
 	"PGCombatTracker/collectors"
 	"PGCombatTracker/ui"
 	"PGCombatTracker/utils"
-	"fmt"
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -52,7 +51,6 @@ func run(window *app.Window) error {
 			if stats != nil && stats.IsAlive() {
 				<-stats.Notify()
 				window.Invalidate()
-				fmt.Println("received window update")
 				continue
 			}
 

@@ -25,14 +25,14 @@ type FileSelectionPage struct {
 	dirty bool
 
 	// Widgets
-	fileList          *widget.List
-	refreshIcon       *widget.Icon
-	refreshButton     *widget.Clickable
-	browseFileIcon    *widget.Icon
-	browseFileButton  *widget.Clickable
-	exitButton        *widget.Clickable
-	settingsIcon      *widget.Icon
-	settingsButton    *widget.Clickable
+	fileList         *widget.List
+	refreshIcon      *widget.Icon
+	refreshButton    *widget.Clickable
+	browseFileIcon   *widget.Icon
+	browseFileButton *widget.Clickable
+	exitButton       *widget.Clickable
+	settingsIcon     *widget.Icon
+	settingsButton   *widget.Clickable
 
 	modalLayer *components.ModalLayer
 	dropdown   *components.Dropdown

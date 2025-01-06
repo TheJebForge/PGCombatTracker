@@ -60,3 +60,9 @@ func PascalSplit(src string) (entries []string) {
 type LongFormatable interface {
 	StringCL(long bool) string
 }
+
+type InterpolatableLongFormatable interface {
+	LongFormatable
+	Interpolatable
+	InterpolateILF(other InterpolatableLongFormatable, t float64) InterpolatableLongFormatable
+}
