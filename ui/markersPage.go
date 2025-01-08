@@ -62,7 +62,7 @@ func NewMarkersPage(filePath string, markers []abstract.Marker) *MarkersPage {
 		openButton:          &widget.Clickable{},
 		exportButton:        &widget.Clickable{},
 		watchFileCheckbox: &widget.Bool{
-			Value: true,
+			Value: parser.IsFileMostRecent(filePath),
 		},
 	}
 }

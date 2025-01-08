@@ -9,8 +9,8 @@ type Settings struct {
 
 func NewSettings() *Settings {
 	return &Settings{
-		TickIntervalSeconds:    1,
-		SecondsUntilDPSReset:   60,
+		TickIntervalSeconds:    2,
+		SecondsUntilDPSReset:   15,
 		RemoveLevelsFromSkills: true,
 		EntitiesThatCountAsPets: []string{
 			"Summoned Golem Minion",

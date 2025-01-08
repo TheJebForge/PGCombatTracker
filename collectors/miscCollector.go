@@ -47,7 +47,7 @@ type MiscCollector struct {
 	subjectDropdown *components.Dropdown
 }
 
-func (m *MiscCollector) Reset() {
+func (m *MiscCollector) Reset(info abstract.StatisticsInformation) {
 	m.all = subjectiveMisc{}
 	m.subjects = nil
 	m.subjectDropdown.SetOptions([]fmt.Stringer{subjectChoice("")})

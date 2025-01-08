@@ -40,8 +40,8 @@ func NewTimeController(baseChart *TimeBasedChart) (*TimeController, error) {
 
 	defaultOptions := []RealTimeOption{
 		{
-			Label:   "15s",
-			Seconds: 15,
+			Label:   "30s",
+			Seconds: 30,
 		},
 		{
 			Label:   "1m",
@@ -122,11 +122,7 @@ func (tc *TimeController) Add(point TimePoint) {
 		tc.FullValueRange = tc.FullValueRange.Expand(point.Value)
 	}
 
-	if tc.CurrentMode == OverviewTimeMode {
-		tc.overviewFramer.recalculateControllerBounds()
-	} else {
-		tc.recalculateRealTimeFrame()
-	}
+	tc.RecalculateTimeFrame()
 }
 
 func (tc *TimeController) recalculateRealTimeFrame() {
@@ -134,6 +130,14 @@ func (tc *TimeController) recalculateRealTimeFrame() {
 
 	tc.CurrentTimeFrame.From = now.Add(time.Second * time.Duration(-tc.LookBackSeconds))
 	tc.CurrentTimeFrame.To = now
+}
+
+func (tc *TimeController) RecalculateTimeFrame() {
+	if tc.CurrentMode == OverviewTimeMode {
+		tc.overviewFramer.recalculateControllerBounds()
+	} else {
+		tc.recalculateRealTimeFrame()
+	}
 }
 
 func StyleTimeController(theme *material.Theme, controller *TimeController) TimeControllerStyle {

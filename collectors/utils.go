@@ -179,3 +179,20 @@ func (d displayChoice) String() string {
 
 	return ""
 }
+
+type damageChartChoice uint8
+
+const (
+	DamageChart damageChartChoice = iota
+	DPSChart
+)
+
+func (d damageChartChoice) String() string {
+	switch d {
+	case DamageChart:
+		return "Total Damage"
+	case DPSChart:
+		return "DPS"
+	}
+	return ""
+}

@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+const DateFormat = "06-01-02"
 const TimeFormat = "06-01-02 15:04:05"
 
 func ParseLine(line string) *abstract.ChatEvent {

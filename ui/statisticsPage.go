@@ -265,11 +265,18 @@ func (s *StatisticsPage) body(state abstract.LayeredState) layout.Widget {
 			layout.Rigid(top),
 			utils.FlexSpacerH(utils.CommonSpacing),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return material.List(state.Theme(), s.collectorBody).Layout(
+				return layout.Inset{
+					Left: utils.CommonSpacing, Right: utils.CommonSpacing,
+				}.Layout(
 					gtx,
-					len(body),
-					func(gtx layout.Context, index int) layout.Dimensions {
-						return body[index](gtx)
+					func(gtx layout.Context) layout.Dimensions {
+						return material.List(state.Theme(), s.collectorBody).Layout(
+							gtx,
+							len(body),
+							func(gtx layout.Context, index int) layout.Dimensions {
+								return body[index](gtx)
+							},
+						)
 					},
 				)
 			}),

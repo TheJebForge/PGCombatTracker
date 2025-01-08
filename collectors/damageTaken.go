@@ -69,7 +69,7 @@ type DamageTakenCollector struct {
 	longFormatBool  *widget.Bool
 }
 
-func (d *DamageTakenCollector) Reset() {
+func (d *DamageTakenCollector) Reset(info abstract.StatisticsInformation) {
 	d.victims = nil
 	d.total = subjectiveDamageTaken{}
 	d.registeredPets = nil

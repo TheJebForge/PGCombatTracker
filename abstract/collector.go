@@ -6,7 +6,7 @@ import (
 )
 
 type Collector interface {
-	Reset()
+	Reset(info StatisticsInformation)
 	Tick(info StatisticsInformation, at time.Time)
 	Collect(info StatisticsInformation, event *ChatEvent) error
 	TabName() string

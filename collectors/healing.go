@@ -79,7 +79,7 @@ type HealingCollector struct {
 	longFormatBool     *widget.Bool
 }
 
-func (h *HealingCollector) Reset() {
+func (h *HealingCollector) Reset(info abstract.StatisticsInformation) {
 	h.allies = healingWithMax{}
 	h.enemies = healingWithMax{}
 	h.enemyTypes = healingWithMax{}

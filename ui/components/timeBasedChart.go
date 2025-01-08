@@ -322,11 +322,7 @@ func CalculateTimeChartPoints(
 	var newPoints []f32.Point
 	for _, point := range resultPointArray {
 		valueFromMin := point.Y - valueRange.Min
-		adjustedValue := float64(valueFromMin) * conversionValue
-
-		if adjustedValue < 0 || adjustedValue > floatingHeight {
-			continue
-		}
+		adjustedValue := max(0, min(float64(valueFromMin)*conversionValue, floatingHeight))
 
 		newPoints = append(newPoints, f32.Point{
 			X: float32(point.X),

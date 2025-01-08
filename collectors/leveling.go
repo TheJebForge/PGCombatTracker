@@ -51,7 +51,7 @@ type LevelingCollector struct {
 	longFormatBool  *widget.Bool
 }
 
-func (l *LevelingCollector) Reset() {
+func (l *LevelingCollector) Reset(info abstract.StatisticsInformation) {
 	l.all = subjectiveSkillsXP{}
 	l.subjects = nil
 	l.subjectDropdown.SetOptions([]fmt.Stringer{subjectChoice("")})

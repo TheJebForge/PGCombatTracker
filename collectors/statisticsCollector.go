@@ -39,7 +39,7 @@ func NewStatisticsCollector(state abstract.GlobalState, path string, watchFile b
 	return &StatisticsCollector{
 		settings: state.Settings(),
 		collectors: []abstract.Collector{
-			NewDamageDealtCollector(),
+			NewDamageDealtCollector(state.Settings()),
 			NewDamageTakenCollector(),
 			NewHealingCollector(),
 			NewSkillsCollector(),
@@ -103,7 +103,7 @@ func (stats *StatisticsCollector) Reset() {
 	stats.lock.Lock()
 
 	for _, collector := range stats.collectors {
-		collector.Reset()
+		collector.Reset(stats)
 	}
 
 	stats.lock.Unlock()

@@ -95,7 +95,7 @@ type SkillsCollector struct {
 	longFormatBool  *widget.Bool
 }
 
-func (s *SkillsCollector) Reset() {
+func (s *SkillsCollector) Reset(info abstract.StatisticsInformation) {
 	s.allies = subjectiveSkillUses{}
 	s.enemies = subjectiveSkillUses{}
 	s.all = subjectiveSkillUses{}

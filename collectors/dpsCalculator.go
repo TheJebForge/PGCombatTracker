@@ -9,15 +9,79 @@ import (
 	"time"
 )
 
-func NewDPSCalculator(chart *components.TimeBasedChart, settings *abstract.Settings) *DPSCalculator {
+func dpsZeroPoint(point components.TimePoint) components.TimePoint {
+	return components.TimePoint{
+		Time:    point.Time.Add(-time.Millisecond),
+		Value:   0,
+		Details: DPSDetail(0),
+	}
+}
+
+func NewDPSCalculatorForChart(chart *components.TimeBasedChart, settings *abstract.Settings) *DPSCalculator {
+	return NewDPSCalculator(
+		func(point components.TimePoint) {
+			dp := chart.DataPoints
+			last := len(dp) - 1
+
+			if len(dp) == 0 {
+				chart.Add(dpsZeroPoint(point))
+			}
+
+			if len(dp) < 2 {
+				chart.Add(point)
+			} else {
+				if dp[last].Value == dp[last-1].Value && dp[last].Value == point.Value && point.Value == 0 {
+					dp[last].Time = point.Time
+				} else {
+					if dp[last].Value == 0 {
+						chart.Add(dpsZeroPoint(point))
+					}
+					chart.Add(point)
+				}
+			}
+		},
+		settings,
+	)
+}
+
+func NewDPSCalculatorForController(controller *components.TimeController, settings *abstract.Settings) *DPSCalculator {
+	return NewDPSCalculator(
+		func(point components.TimePoint) {
+			dp := controller.BaseChart.DataPoints
+			last := len(dp) - 1
+
+			if len(dp) == 0 {
+				controller.Add(dpsZeroPoint(point))
+			}
+
+			if len(dp) < 2 {
+				controller.Add(point)
+			} else {
+				if dp[last].Value == dp[last-1].Value && dp[last].Value == point.Value && point.Value == 0 {
+					dp[last].Time = point.Time
+					controller.FullTimeFrame = controller.FullTimeFrame.Expand(point.Time)
+					controller.RecalculateTimeFrame()
+				} else {
+					if dp[last].Value == 0 {
+						controller.Add(dpsZeroPoint(point))
+					}
+					controller.Add(point)
+				}
+			}
+		},
+		settings,
+	)
+}
+
+func NewDPSCalculator(pointsConsumer func(components.TimePoint), settings *abstract.Settings) *DPSCalculator {
 	return &DPSCalculator{
-		Chart:             chart,
+		PointsConsumer:    pointsConsumer,
 		SecondsUntilReset: settings.SecondsUntilDPSReset,
 	}
 }
 
 type DPSCalculator struct {
-	Chart             *components.TimeBasedChart
+	PointsConsumer    func(components.TimePoint)
 	SecondsUntilReset int
 
 	startTime   time.Time
@@ -48,27 +112,12 @@ func (D DPSDetail) InterpolateILF(other utils.InterpolatableLongFormatable, t fl
 	return D.Interpolate(other, t).(utils.InterpolatableLongFormatable)
 }
 
-func (dps *DPSCalculator) politeAdd(at time.Time, value int) {
-	dp := dps.Chart.DataPoints
-	last := len(dp) - 1
-
-	if len(dp) < 2 {
-		dps.Chart.Add(components.TimePoint{
-			Time:    at,
-			Value:   value,
-			Details: DPSDetail(value),
-		})
-	} else {
-		if dp[last].Value == dp[last-1].Value {
-			dp[last].Time = at
-		} else {
-			dps.Chart.Add(components.TimePoint{
-				Time:    at,
-				Value:   value,
-				Details: DPSDetail(value),
-			})
-		}
-	}
+func (dps *DPSCalculator) sendData(at time.Time, value int) {
+	dps.PointsConsumer(components.TimePoint{
+		Time:    at,
+		Value:   value,
+		Details: DPSDetail(value),
+	})
 }
 
 func (dps *DPSCalculator) avgDamage(at time.Time) int {
@@ -87,7 +136,7 @@ func (dps *DPSCalculator) Add(at time.Time, damage int) {
 		dps.totalDamage += damage
 	}
 
-	dps.politeAdd(at, dps.avgDamage(at))
+	dps.sendData(at, dps.avgDamage(at))
 }
 
 func (dps *DPSCalculator) Tick(at time.Time) {
@@ -95,5 +144,5 @@ func (dps *DPSCalculator) Tick(at time.Time) {
 		dps.totalDamage = 0
 	}
 
-	dps.politeAdd(at, dps.avgDamage(at))
+	dps.sendData(at, dps.avgDamage(at))
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strings"
+	"time"
 )
 
 func Exists(path string) (bool, error) {
@@ -62,7 +64,7 @@ func GetSortedLogFiles(p string) ([]os.FileInfo, error) {
 		}
 	}
 
-	slices.SortFunc(files, func (a, b os.FileInfo) int {
+	slices.SortFunc(files, func(a, b os.FileInfo) int {
 		return b.ModTime().Compare(a.ModTime())
 	})
 
@@ -81,4 +83,25 @@ func GetLatestLogFile(p string) (string, error) {
 	}
 
 	return files[0].Name(), nil
+}
+
+func IsFileMostRecent(path string) bool {
+	now := time.Now()
+
+	_, rest, found := strings.Cut(path, "Chat-")
+	if !found {
+		return false
+	}
+
+	date, _, found := strings.Cut(rest, ".log")
+	if !found {
+		return false
+	}
+
+	parsedDate, err := time.ParseInLocation(DateFormat, date, now.Location())
+	if err != nil {
+		return false
+	}
+
+	return parsedDate.Before(now) && now.Before(parsedDate.Add(time.Hour*24))
 }

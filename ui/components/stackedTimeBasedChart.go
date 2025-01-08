@@ -86,7 +86,7 @@ func YatXOnLine(points []f32.Point, targetX float32) float32 {
 				}
 
 				targetOffset := targetX - previousPoint.X
-				proportion := targetOffset / width
+				proportion := min(max(0, targetOffset/width), 1)
 
 				verticalDifference := point.Y - previousPoint.Y
 
@@ -124,7 +124,7 @@ func InterpolatedTimePoint(points []TimePoint, target time.Time) TimePoint {
 				}
 
 				secondsOffset := target.Sub(previousPoint.Time).Seconds()
-				proportion := secondsOffset / secondsDifference
+				proportion := min(max(0, secondsOffset/secondsDifference), 1)
 
 				return TimePoint{
 					Time:    target,
@@ -142,23 +142,27 @@ func InterpolatedTimePoint(points []TimePoint, target time.Time) TimePoint {
 }
 
 func (stc *StackedTimeBasedChart) RecalculatePoints(tolerance float32, width, height int) {
-	var sourceLines [][]f32.Point
+	//startTime := time.Now()
+	sourceLines := make([][]f32.Point, 0, len(stc.Sources))
 
+	allLocations := 0
 	for _, source := range stc.Sources {
+		sourceLine := CalculateTimeChartPoints(
+			source.DataPoints,
+			stc.DisplayTimeFrame,
+			stc.DisplayValueRange,
+			tolerance,
+			width,
+			height,
+		)
 		sourceLines = append(
 			sourceLines,
-			CalculateTimeChartPoints(
-				source.DataPoints,
-				stc.DisplayTimeFrame,
-				stc.DisplayValueRange,
-				tolerance,
-				width,
-				height,
-			),
+			sourceLine,
 		)
+		allLocations += len(sourceLine)
 	}
 
-	var xLocations []float32
+	xLocations := make([]float32, 0, allLocations)
 
 	for _, line := range sourceLines {
 		for _, point := range line {
@@ -208,6 +212,8 @@ func (stc *StackedTimeBasedChart) RecalculatePoints(tolerance float32, width, he
 
 	stc.CalculatedBreakdown = breakdowns
 	stc.CalculatedLines = newLines
+
+	//log.Println("time point calculation", time.Now().Sub(startTime))
 }
 
 func StyleStackedTimeBasedChart(theme *material.Theme, chart *StackedTimeBasedChart) StackedTimeBasedChartStyle {
