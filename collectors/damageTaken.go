@@ -4,6 +4,7 @@ import (
 	"PGCombatTracker/abstract"
 	"PGCombatTracker/ui/components"
 	"PGCombatTracker/utils"
+	"PGCombatTracker/utils/drawing"
 	"cmp"
 	"fmt"
 	"gioui.org/layout"
@@ -213,14 +214,24 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 			return victim.victim == skillUse.Victim
 		},
 		func() subjectiveDamageTaken {
+			totalDamage := *skillUse.Damage
+
 			timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
 			if err != nil {
 				log.Fatalln(err)
 			}
+			totalChart := components.NewTimeBasedChart("Total")
+			point := components.TimePoint{
+				Time:    event.Time,
+				Value:   totalDamage.Total(),
+				Details: totalDamage,
+			}
+			timeController.Add(point)
+			totalChart.Add(point)
 
 			return subjectiveDamageTaken{
 				victim:      skillUse.Victim,
-				totalDamage: *skillUse.Damage,
+				totalDamage: totalDamage,
 				damageFromEnemies: enemyDamageWithMax{
 					enemies: []enemyDamage{
 						createEnemyDamage(false)(),
@@ -234,7 +245,7 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 					maxDamage: *skillUse.Damage,
 				},
 				timeController: timeController,
-				totalChart:     components.NewTimeBasedChart("Total"),
+				totalChart:     totalChart,
 			}
 		},
 		func(victim subjectiveDamageTaken) subjectiveDamageTaken {
@@ -544,6 +555,194 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) (layout.Widget, [
 	return topWidget, widgets
 }
 
+func (d *DamageTakenCollector) exportWidget(styledFonts *drawing.StyledFontPack, enemy enemyDamage, widget drawing.Widget) drawing.Widget {
+	return exportUniversalStatsTextAsStack(
+		styledFonts, enemy.damage,
+		widget, enemy.amount,
+		enemy.name, "used %v times",
+		d.longFormatBool.Value,
+	)
+}
+
+func (d *DamageTakenCollector) exportBar(styledFonts *drawing.StyledFontPack, enemy enemyDamage, maxDamage int) drawing.Widget {
+	return exportUniversalBar(
+		styledFonts, enemy.damage,
+		enemy.damage.Total(), maxDamage, enemy.amount,
+		enemy.name, "used %v times",
+		d.longFormatBool.Value,
+	)
+}
+
 func (d *DamageTakenCollector) Export(state abstract.LayeredState) image.Image {
-	return image.NewNRGBA(image.Rectangle{Max: image.Point{X: 4, Y: 4}})
+	victim := d.total
+	for _, possibleVictim := range d.victims {
+		if possibleVictim.victim == d.currentVictim {
+			victim = possibleVictim
+			break
+		}
+	}
+
+	var enemies *enemyDamageWithMax
+	switch d.groupByDropdown.Value.(GroupBy) {
+	case DontGroup:
+		enemies = &victim.damageFromEnemies
+	case GroupByType:
+		enemies = &victim.damageFromEnemyTypes
+	default:
+		log.Fatalln("wtf happened to the dropdown")
+	}
+
+	styledFonts := drawing.StyleFontPack(state.FontPack(), state.Theme().Fg)
+
+	body := drawing.Empty
+
+	switch d.currentDisplay {
+	case DisplayBars:
+		items := make([]drawing.FlexChild, 0, len(enemies.enemies)*2-1+4)
+
+		maxDamage := enemies.maxDamage.Total()
+
+		items = append(
+			items,
+			drawing.Rigid(d.exportBar(
+				styledFonts,
+				enemyDamage{
+					name:   "Total Damage",
+					amount: 0,
+					damage: victim.totalDamage,
+				},
+				victim.totalDamage.Total(),
+			)),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		for i, enemy := range enemies.enemies {
+			if i != 0 {
+				items = append(items, drawing.FlexVSpacer(drawing.CommonSpacing))
+			}
+
+			items = append(items, drawing.Rigid(d.exportBar(styledFonts, enemy, maxDamage)))
+		}
+
+		items = append(
+			items,
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+			drawing.Rigid(d.exportBar(
+				styledFonts,
+				enemyDamage{
+					name:   "Indirect Damage",
+					amount: 0,
+					damage: victim.indirectDamage,
+				},
+				victim.indirectDamage.Total(),
+			)),
+		)
+
+		body = drawing.Flex{
+			ExpandW: true,
+			Axis:    layout.Vertical,
+		}.Layout(
+			items...,
+		)
+	case DisplayPie:
+		var totalValue int
+
+		pieItems := make([]drawing.PieChartItem, 0, max(1, len(victim.damageFromEnemyTypes.enemies)))
+		for i, enemy := range victim.damageFromEnemyTypes.enemies {
+			if i >= d.currentLimit.Int() {
+				break
+			}
+
+			pieItems = append(pieItems, drawing.PieChartItem{
+				Name:    enemy.name,
+				Value:   enemy.damage.Total(),
+				SubText: enemy.damage.StringCL(d.longFormatBool.Value),
+			})
+			totalValue += enemy.damage.Total()
+		}
+
+		style := drawing.PieChart{
+			OverflowLimit: 15,
+			ColorBoxSize:  drawing.CommonSpacing * 4,
+			TextStyle:     styledFonts.Body,
+			SubTextStyle:  drawing.MakeTextStyle(styledFonts.Smaller.Face, utils.GrayText),
+		}
+
+		body = style.Layout(totalValue, pieItems...)
+	case DisplayGraphs:
+		items := make([]drawing.FlexChild, 0, len(enemies.enemies)*2-1+6)
+
+		items = append(
+			items,
+			drawing.Rigid(exportTimeFrame(styledFonts, victim.timeController.CurrentTimeFrame)),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		style := drawing.StyleAreaChart(victim.totalChart, components.StringToColor("Total Damage"))
+		style.MinHeight = 200
+
+		items = append(
+			items,
+			drawing.Rigid(d.exportWidget(
+				styledFonts,
+				enemyDamage{
+					name:   "Total Damage",
+					amount: 0,
+					damage: victim.totalDamage,
+				},
+				style.Layout(),
+			)),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		for i, enemy := range enemies.enemies {
+			if i != 0 {
+				items = append(items, drawing.FlexVSpacer(drawing.CommonSpacing))
+			}
+
+			style := drawing.StyleAreaChart(enemy.chart, components.StringToColor(enemy.name))
+			style.MinHeight = 200
+
+			items = append(items, drawing.Rigid(d.exportWidget(styledFonts, enemy, style.Layout())))
+		}
+
+		body = drawing.Flex{
+			ExpandW: true,
+			Axis:    layout.Vertical,
+		}.Layout(
+			items...,
+		)
+	}
+
+	base := layoutTitle(
+		styledFonts,
+		d.TabName(),
+		drawing.HorizontalWrap{
+			Alignment:   layout.Middle,
+			Spacing:     drawing.CommonSpacing * 3,
+			LineSpacing: drawing.CommonSpacing,
+		}.Layout(
+			func(ltx drawing.Context) drawing.Result {
+				if d.currentVictim != "" {
+					return styledFonts.Smaller.Layout(fmt.Sprintf("Victim: %v", d.currentVictim))(ltx)
+				}
+
+				return styledFonts.Smaller.Layout("Victim: All")(ltx)
+			},
+			styledFonts.Smaller.Layout(fmt.Sprintf("Display: %v", d.currentDisplay)),
+			func(ltx drawing.Context) drawing.Result {
+				if d.currentDisplay != DisplayPie {
+					return styledFonts.Smaller.Layout(fmt.Sprintf("Group: %v", d.groupByDropdown.Value.(GroupBy)))(ltx)
+				}
+
+				return styledFonts.Smaller.Layout(fmt.Sprintf("Limit: %v", d.currentLimit))(ltx)
+			},
+		),
+		drawing.RoundedSurface(
+			utils.SecondBG,
+			body,
+		),
+	)
+
+	return drawing.ExportImage(state.Theme(), base, drawing.F64(800, 10000))
 }

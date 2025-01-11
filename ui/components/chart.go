@@ -50,7 +50,7 @@ func BarWidget(color color.NRGBA, height unit.Dp, progress float64) layout.Widge
 
 		defer clip.UniformRRect(image.Rectangle{
 			Max: size,
-		}, 5).Push(gtx.Ops).Pop()
+		}, min(5, width)).Push(gtx.Ops).Pop()
 		paint.Fill(gtx.Ops, color)
 
 		return layout.Dimensions{

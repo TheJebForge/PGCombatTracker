@@ -535,9 +535,32 @@ func (d *DamageDealtCollector) UI(state abstract.LayeredState) (layout.Widget, [
 	return topWidget, widgets
 }
 
+func (d *DamageDealtCollector) exportWidget(styledFonts *drawing.StyledFontPack, skill skillDamage, widget drawing.Widget) drawing.Widget {
+	return exportUniversalStatsTextAsStack(
+		styledFonts, skill.damage,
+		widget, skill.amount,
+		skill.name, "used %v times",
+		d.longFormatBool.Value,
+	)
+}
+
+func (d *DamageDealtCollector) exportBar(styledFonts *drawing.StyledFontPack, skill skillDamage, maxDamage int) drawing.Widget {
+	return exportUniversalBar(
+		styledFonts, skill.damage,
+		skill.damage.Total(), maxDamage, skill.amount,
+		skill.name, "used %v times",
+		d.longFormatBool.Value,
+	)
+}
+
 func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
-	longFormat := d.longFormatBool.Value
 	subject := d.total
+	for _, possibleSubject := range d.subjects {
+		if possibleSubject.subject == d.currentSubject {
+			subject = possibleSubject
+			break
+		}
+	}
 
 	styledFonts := drawing.StyleFontPack(state.FontPack(), state.Theme().Fg)
 
@@ -547,28 +570,19 @@ func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
 	case DisplayBars:
 		items := make([]drawing.FlexChild, 0, len(subject.skillDamage)*2-1+4)
 
-		maxDamage := float64(subject.maxDamage.Total())
+		maxDamage := subject.maxDamage.Total()
 
-		name := "Total Damage"
 		items = append(
 			items,
-			drawing.Rigid(
-				drawing.RoundedSurface(
-					components.StringToColor(name),
-					drawing.Flex{
-						Alignment: layout.Middle,
-						ExpandW:   true,
-					}.Layout(
-						drawing.Rigid(drawing.Flex{
-							Axis: layout.Vertical,
-						}.Layout(
-							drawing.Rigid(styledFonts.Body.Layout(name)),
-						)),
-						drawing.Flexer(1),
-						drawing.Rigid(styledFonts.Body.Layout(subject.totalDamage.StringCL(longFormat))),
-					),
-				),
-			),
+			drawing.Rigid(d.exportBar(
+				styledFonts,
+				skillDamage{
+					name:   "Total Damage",
+					amount: 0,
+					damage: subject.totalDamage,
+				},
+				subject.totalDamage.Total(),
+			)),
 			drawing.FlexVSpacer(drawing.CommonSpacing),
 		)
 
@@ -577,48 +591,21 @@ func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
 				items = append(items, drawing.FlexVSpacer(drawing.CommonSpacing))
 			}
 
-			percent := float64(skill.damage.Total()) / maxDamage
-
-			items = append(items, drawing.Rigid(drawing.CustomSurface(
-				percentBar(percent, components.StringToColor(skill.name)),
-				drawing.Flex{
-					Alignment: layout.Middle,
-					ExpandW:   true,
-				}.Layout(
-					drawing.Rigid(drawing.Flex{
-						Axis: layout.Vertical,
-					}.Layout(
-						drawing.Rigid(styledFonts.Body.Layout(skill.name)),
-						drawing.FlexVSpacer(drawing.CommonSpacing),
-						drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf("used %d times", skill.amount))),
-					)),
-					drawing.Flexer(1),
-					drawing.Rigid(styledFonts.Body.Layout(skill.damage.StringCL(longFormat))),
-				),
-			)))
+			items = append(items, drawing.Rigid(d.exportBar(styledFonts, skill, maxDamage)))
 		}
 
-		name = "Indirect Damage"
 		items = append(
 			items,
 			drawing.FlexVSpacer(drawing.CommonSpacing),
-			drawing.Rigid(
-				drawing.RoundedSurface(
-					components.StringToColor(name),
-					drawing.Flex{
-						Alignment: layout.Middle,
-						ExpandW:   true,
-					}.Layout(
-						drawing.Rigid(drawing.Flex{
-							Axis: layout.Vertical,
-						}.Layout(
-							drawing.Rigid(styledFonts.Body.Layout(name)),
-						)),
-						drawing.Flexer(1),
-						drawing.Rigid(styledFonts.Body.Layout(subject.indirectDamage.StringCL(longFormat))),
-					),
-				),
-			),
+			drawing.Rigid(d.exportBar(
+				styledFonts,
+				skillDamage{
+					name:   "Indirect Damage",
+					amount: 0,
+					damage: subject.indirectDamage,
+				},
+				subject.indirectDamage.Total(),
+			)),
 		)
 
 		body = drawing.Flex{
@@ -640,9 +627,10 @@ func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
 		}
 
 		style := drawing.PieChart{
-			ColorBoxSize: drawing.CommonSpacing * 4,
-			TextStyle:    styledFonts.Body,
-			SubTextStyle: drawing.MakeTextStyle(styledFonts.Smaller.Face, utils.GrayText),
+			OverflowLimit: 15,
+			ColorBoxSize:  drawing.CommonSpacing * 4,
+			TextStyle:     styledFonts.Body,
+			SubTextStyle:  drawing.MakeTextStyle(styledFonts.Smaller.Face, utils.GrayText),
 		}
 
 		body = style.Layout(totalValue, pieItems...)
@@ -651,44 +639,21 @@ func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
 
 		items = append(
 			items,
-			drawing.Rigid(drawing.RoundedSurface(utils.LesserContrastBg, drawing.Flex{
-				Axis:      layout.Horizontal,
-				Alignment: layout.Middle,
-				ExpandW:   true,
-			}.Layout(
-				drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf(
-					"Data from %v",
-					subject.totalChart.CurrentTimeFrame.From.Format(time.DateTime),
-				))),
-				drawing.Flexer(1),
-				drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf(
-					"to %v",
-					subject.totalChart.CurrentTimeFrame.To.Format(time.DateTime),
-				))),
-			))),
+			drawing.Rigid(exportTimeFrame(styledFonts, subject.totalChart.CurrentTimeFrame)),
 			drawing.FlexVSpacer(drawing.CommonSpacing),
 		)
 
-		name := "Total Damage"
 		items = append(
 			items,
-			drawing.Rigid(
-				drawing.RoundedSurface(
-					components.StringToColor(name),
-					drawing.Flex{
-						Alignment: layout.Middle,
-						ExpandW:   true,
-					}.Layout(
-						drawing.Rigid(drawing.Flex{
-							Axis: layout.Vertical,
-						}.Layout(
-							drawing.Rigid(styledFonts.Body.Layout(name)),
-						)),
-						drawing.Flexer(1),
-						drawing.Rigid(styledFonts.Body.Layout(subject.totalDamage.StringCL(longFormat))),
-					),
-				),
-			),
+			drawing.Rigid(d.exportBar(
+				styledFonts,
+				skillDamage{
+					name:   "Total Damage",
+					amount: 0,
+					damage: subject.totalDamage,
+				},
+				subject.totalDamage.Total(),
+			)),
 			drawing.FlexVSpacer(drawing.CommonSpacing),
 		)
 
@@ -718,28 +683,7 @@ func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
 			style := drawing.StyleAreaChart(skillChart, components.StringToColor(skill.name))
 			style.MinHeight = 200
 
-			items = append(items, drawing.Rigid(
-				drawing.Stack{
-					Alignment: layout.Center,
-					Wide:      true,
-				}.Layout(
-					style.Layout(),
-					drawing.UniformInset(drawing.CommonSpacing*2).Layout(drawing.Flex{
-						Alignment: layout.Middle,
-						ExpandW:   true,
-					}.Layout(
-						drawing.Rigid(drawing.Flex{
-							Axis: layout.Vertical,
-						}.Layout(
-							drawing.Rigid(styledFonts.Body.Layout(skill.name)),
-							drawing.FlexVSpacer(drawing.CommonSpacing),
-							drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf("used %d times", skill.amount))),
-						)),
-						drawing.Flexer(1),
-						drawing.Rigid(styledFonts.Body.Layout(skill.damage.StringCL(longFormat))),
-					)),
-				),
-			))
+			items = append(items, drawing.Rigid(d.exportWidget(styledFonts, skill, style.Layout())))
 		}
 
 		body = drawing.Flex{
