@@ -3,6 +3,7 @@ package components
 import (
 	"PGCombatTracker/utils"
 	"fmt"
+	"gioui.org/f32"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -196,12 +197,40 @@ func (pc PieChart) Layout(gtx layout.Context, totalValue int, items ...PieChartI
 			Y: pieSize,
 		},
 	}.Push(gtx.Ops)
-	paint.NewImageOp(utils.PieImage{
-		Size:   pieSize,
-		Angles: angles,
-		Colors: colors,
-	}).Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
+
+	floatingPieSize := float32(pieSize)
+	halfPie := floatingPieSize / 2
+
+	pieTransOp := op.Offset(f32.Pt(
+		halfPie,
+		halfPie,
+	).Round()).Push(gtx.Ops)
+
+	previousAngle := -(math.Pi / 2)
+	for i, angle := range angles {
+		clr := colors[i]
+
+		vy, vx := math.Sincos(previousAngle)
+		pen := f32.Pt(float32(vx), float32(vy)).Mul(halfPie)
+
+		path := clip.Path{}
+		path.Begin(gtx.Ops)
+
+		path.MoveTo(f32.Pt(0, 0))
+		path.LineTo(pen)
+
+		center := f32.Pt(0, 0).Sub(pen)
+		path.Arc(center, center, float32(angle))
+		path.Close()
+
+		paint.FillShape(gtx.Ops, clr, clip.Outline{
+			Path: path.End(),
+		}.Op())
+
+		previousAngle += angle
+	}
+
+	pieTransOp.Pop()
 	clipOp.Pop()
 	transOp.Pop()
 
