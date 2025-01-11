@@ -21,15 +21,19 @@ type enemyDamage struct {
 	name   string
 	amount int
 	damage abstract.Vitals
+	chart  *components.TimeBasedChart
 }
 
 type enemyDamageWithMax struct {
 	enemies   []enemyDamage
 	maxDamage abstract.Vitals
+	maxRange  components.DataRange
 }
 
 type subjectiveDamageTaken struct {
 	victim               string
+	timeController       *components.TimeController
+	totalChart           *components.TimeBasedChart
 	totalDamage          abstract.Vitals
 	indirectDamage       abstract.Vitals
 	damageFromEnemies    enemyDamageWithMax
@@ -51,10 +55,41 @@ func NewDamageTakenCollector() *DamageTakenCollector {
 		log.Fatalln(err)
 	}
 
+	displayDropdown, err := components.NewDropdown(
+		"Display",
+		DisplayBars,
+		DisplayPie,
+		DisplayGraphs,
+	)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	limitDropdown, err := components.NewDropdown(
+		"Limit",
+		LimitTop5,
+		LimitTop10,
+		LimitTop15,
+		LimitTop25,
+		LimitTop50,
+		NoLimit,
+	)
+
+	timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	return &DamageTakenCollector{
 		groupByDropdown: groupByDropdown,
 		victimDropdown:  victimDropdown,
 		longFormatBool:  &widget.Bool{},
+		displayDropdown: displayDropdown,
+		limitDropdown:   limitDropdown,
+		total: subjectiveDamageTaken{
+			timeController: timeController,
+			totalChart:     components.NewTimeBasedChart("Total"),
+		},
 	}
 }
 
@@ -64,15 +99,28 @@ type DamageTakenCollector struct {
 	victims        []subjectiveDamageTaken
 	registeredPets []string
 
+	currentDisplay displayChoice
+	currentLimit   limitChoice
+
 	// UI stuff
 	victimDropdown  *components.Dropdown
 	groupByDropdown *components.Dropdown
 	longFormatBool  *widget.Bool
+	displayDropdown *components.Dropdown
+	limitDropdown   *components.Dropdown
 }
 
 func (d *DamageTakenCollector) Reset(info abstract.StatisticsInformation) {
+	timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	d.victims = nil
-	d.total = subjectiveDamageTaken{}
+	d.total = subjectiveDamageTaken{
+		timeController: timeController,
+		totalChart:     components.NewTimeBasedChart("Total"),
+	}
 	d.registeredPets = nil
 	d.victimDropdown.SetOptions([]fmt.Stringer{subjectChoice("")})
 	d.currentVictim = ""
@@ -97,16 +145,29 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 				subject = SplitOffId(subject)
 			}
 
+			chart := components.NewTimeBasedChart(subject)
+			chart.Add(components.TimePoint{
+				Time:    event.Time,
+				Value:   skillUse.Damage.Total(),
+				Details: *skillUse.Damage,
+			})
+
 			return enemyDamage{
 				name:   subject,
 				amount: 1,
 				damage: *skillUse.Damage,
+				chart:  chart,
 			}
 		}
 	}
 	updateEnemyDamage := func(enemy enemyDamage) enemyDamage {
 		enemy.amount++
 		enemy.damage = enemy.damage.Add(*skillUse.Damage)
+		enemy.chart.Add(components.TimePoint{
+			Time:    event.Time,
+			Value:   enemy.damage.Total(),
+			Details: enemy.damage,
+		})
 
 		return enemy
 	}
@@ -117,24 +178,33 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 		return cmp.Compare(b.damage.Total(), a.damage.Total())
 	}
 
+	processEnemyDamageWithMax := func(enemies *enemyDamageWithMax, grouped bool) {
+		enemies.enemies = utils.CreateUpdate(
+			enemies.enemies,
+			findEnemyDamage(grouped),
+			createEnemyDamage(grouped),
+			updateEnemyDamage,
+		)
+		slices.SortFunc(enemies.enemies, enemyDamageSort)
+		enemies.maxDamage = slices.MaxFunc(enemies.enemies, enemyDamageMax).damage
+		enemies.maxRange = enemies.maxRange.Expand(enemies.maxDamage.Total())
+	}
+
+	processSubjectiveDT := func(subject *subjectiveDamageTaken) {
+		subject.totalDamage = subject.totalDamage.Add(*skillUse.Damage)
+		point := components.TimePoint{
+			Time:    event.Time,
+			Value:   subject.totalDamage.Total(),
+			Details: subject.totalDamage,
+		}
+		subject.timeController.Add(point)
+		subject.totalChart.Add(point)
+		processEnemyDamageWithMax(&subject.damageFromEnemies, false)
+		processEnemyDamageWithMax(&subject.damageFromEnemyTypes, true)
+	}
+
 	// Ingest total stuff
-	d.total.totalDamage = d.total.totalDamage.Add(*skillUse.Damage)
-	d.total.damageFromEnemies.enemies = utils.CreateUpdate(
-		d.total.damageFromEnemies.enemies,
-		findEnemyDamage(false),
-		createEnemyDamage(false),
-		updateEnemyDamage,
-	)
-	slices.SortFunc(d.total.damageFromEnemies.enemies, enemyDamageSort)
-	d.total.damageFromEnemies.maxDamage = slices.MaxFunc(d.total.damageFromEnemies.enemies, enemyDamageMax).damage
-	d.total.damageFromEnemyTypes.enemies = utils.CreateUpdate(
-		d.total.damageFromEnemyTypes.enemies,
-		findEnemyDamage(true),
-		createEnemyDamage(true),
-		updateEnemyDamage,
-	)
-	slices.SortFunc(d.total.damageFromEnemyTypes.enemies, enemyDamageSort)
-	d.total.damageFromEnemyTypes.maxDamage = slices.MaxFunc(d.total.damageFromEnemyTypes.enemies, enemyDamageMax).damage
+	processSubjectiveDT(&d.total)
 
 	// Ingest individual stuff
 	d.victims = utils.CreateUpdate(
@@ -143,6 +213,11 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 			return victim.victim == skillUse.Victim
 		},
 		func() subjectiveDamageTaken {
+			timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
+			if err != nil {
+				log.Fatalln(err)
+			}
+
 			return subjectiveDamageTaken{
 				victim:      skillUse.Victim,
 				totalDamage: *skillUse.Damage,
@@ -158,27 +233,12 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 					},
 					maxDamage: *skillUse.Damage,
 				},
+				timeController: timeController,
+				totalChart:     components.NewTimeBasedChart("Total"),
 			}
 		},
 		func(victim subjectiveDamageTaken) subjectiveDamageTaken {
-			victim.totalDamage = victim.totalDamage.Add(*skillUse.Damage)
-			victim.damageFromEnemies.enemies = utils.CreateUpdate(
-				victim.damageFromEnemies.enemies,
-				findEnemyDamage(false),
-				createEnemyDamage(false),
-				updateEnemyDamage,
-			)
-			slices.SortFunc(victim.damageFromEnemies.enemies, enemyDamageSort)
-			victim.damageFromEnemies.maxDamage = slices.MaxFunc(victim.damageFromEnemies.enemies, enemyDamageMax).damage
-			victim.damageFromEnemyTypes.enemies = utils.CreateUpdate(
-				victim.damageFromEnemyTypes.enemies,
-				findEnemyDamage(true),
-				createEnemyDamage(true),
-				updateEnemyDamage,
-			)
-			slices.SortFunc(victim.damageFromEnemyTypes.enemies, enemyDamageSort)
-			victim.damageFromEnemyTypes.maxDamage = slices.MaxFunc(victim.damageFromEnemyTypes.enemies, enemyDamageMax).damage
-
+			processSubjectiveDT(&victim)
 			return victim
 		},
 	)
@@ -295,6 +355,15 @@ func (g GroupBy) String() string {
 	return "Unknown"
 }
 
+func (d *DamageTakenCollector) drawWidget(state abstract.LayeredState, enemy enemyDamage, widget layout.Widget, size unit.Dp) layout.Widget {
+	return drawUniversalStatsText(
+		state, enemy.damage,
+		widget, enemy.amount,
+		enemy.name, "used %v times",
+		size, d.longFormatBool.Value,
+	)
+}
+
 func (d *DamageTakenCollector) drawBar(state abstract.LayeredState, enemy enemyDamage, maxDamage int, size unit.Dp) layout.Widget {
 	return drawUniversalBar(
 		state, enemy.damage,
@@ -309,6 +378,22 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) (layout.Widget, [
 		d.currentVictim = string(d.victimDropdown.Value.(subjectChoice))
 	}
 
+	if d.displayDropdown.Changed() {
+		d.currentDisplay = d.displayDropdown.Value.(displayChoice)
+	}
+
+	if d.limitDropdown.Changed() {
+		d.currentLimit = d.limitDropdown.Value.(limitChoice)
+	}
+
+	victim := d.total
+	for _, possibleVictim := range d.victims {
+		if possibleVictim.victim == d.currentVictim {
+			victim = possibleVictim
+			break
+		}
+	}
+
 	topWidget := topBarSurface(func(gtx layout.Context) layout.Dimensions {
 		if d.longFormatBool.Update(gtx) {
 			gtx.Source.Execute(op.InvalidateCmd{})
@@ -319,49 +404,46 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) (layout.Widget, [
 		}.Layout(
 			gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{
-					Axis:      layout.Horizontal,
-					Alignment: layout.Middle,
+				return components.HorizontalWrap{
+					Alignment:   layout.Middle,
+					Spacing:     utils.CommonSpacing,
+					LineSpacing: utils.CommonSpacing,
 				}.Layout(
 					gtx,
-					layout.Rigid(defaultDropdownStyle(state, d.victimDropdown).Layout),
-					utils.FlexSpacerW(utils.CommonSpacing),
-					layout.Rigid(defaultCheckboxStyle(state, d.longFormatBool, "Use long numbers").Layout),
+					defaultDropdownStyle(state, d.victimDropdown).Layout,
+					defaultCheckboxStyle(state, d.longFormatBool, "Use long numbers").Layout,
+					defaultDropdownStyle(state, d.displayDropdown).Layout,
+					func(gtx layout.Context) layout.Dimensions {
+						switch d.currentDisplay {
+						case DisplayGraphs:
+							fallthrough
+						case DisplayBars:
+							return defaultDropdownStyle(state, d.groupByDropdown).Layout(gtx)
+						case DisplayPie:
+							return defaultDropdownStyle(state, d.limitDropdown).Layout(gtx)
+						}
+
+						return layout.Dimensions{}
+					},
 				)
 			}),
-			utils.FlexSpacerH(utils.CommonSpacing),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{
-					Axis:      layout.Horizontal,
-					Alignment: layout.Middle,
-				}.Layout(
-					gtx,
-					layout.Rigid(defaultDropdownStyle(state, d.groupByDropdown).Layout),
-				)
+				if d.currentDisplay == DisplayGraphs {
+					return layout.Flex{
+						Axis: layout.Vertical,
+					}.Layout(
+						gtx,
+						utils.FlexSpacerH(utils.CommonSpacing),
+						layout.Rigid(components.StyleTimeController(state.Theme(), victim.timeController).Layout),
+					)
+				}
+
+				return layout.Dimensions{}
 			}),
 		)
 	})
 
 	var widgets []layout.Widget
-
-	victim := d.total
-	for _, possibleVictim := range d.victims {
-		if possibleVictim.victim == d.currentVictim {
-			victim = possibleVictim
-			break
-		}
-	}
-
-	widgets = append(widgets, d.drawBar(
-		state,
-		enemyDamage{
-			name:   "Total Damage",
-			amount: 0,
-			damage: victim.totalDamage,
-		},
-		victim.totalDamage.Total(),
-		25,
-	))
 
 	// All the bars go here
 	var enemies *enemyDamageWithMax
@@ -374,22 +456,90 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) (layout.Widget, [
 		log.Fatalln("wtf happened to the dropdown")
 	}
 
-	maxDamage := enemies.maxDamage.Total()
+	switch d.currentDisplay {
+	case DisplayBars:
+		widgets = append(widgets, d.drawBar(
+			state,
+			enemyDamage{
+				name:   "Total Damage",
+				amount: 0,
+				damage: victim.totalDamage,
+			},
+			victim.totalDamage.Total(),
+			25,
+		))
 
-	for _, enemy := range enemies.enemies {
-		widgets = append(widgets, d.drawBar(state, enemy, maxDamage, 40))
-	}
+		maxDamage := enemies.maxDamage.Total()
 
-	widgets = append(widgets, d.drawBar(
-		state,
-		enemyDamage{
-			name:   "Indirect Damage",
+		for _, enemy := range enemies.enemies {
+			widgets = append(widgets, d.drawBar(state, enemy, maxDamage, 40))
+		}
+
+		widgets = append(widgets, d.drawBar(
+			state,
+			enemyDamage{
+				name:   "Indirect Damage",
+				amount: 0,
+				damage: victim.indirectDamage,
+			},
+			victim.indirectDamage.Total(),
+			25,
+		))
+	case DisplayPie:
+		widgets = append(widgets, func(gtx layout.Context) layout.Dimensions {
+			var totalValue int
+			pieItems := make([]components.PieChartItem, 0, max(1, len(victim.damageFromEnemyTypes.enemies)))
+			for i, enemy := range victim.damageFromEnemyTypes.enemies {
+				if i >= d.currentLimit.Int() {
+					break
+				}
+
+				pieItems = append(pieItems, components.PieChartItem{
+					Name:    enemy.name,
+					Value:   enemy.damage.Total(),
+					SubText: enemy.damage.StringCL(d.longFormatBool.Value),
+				})
+				totalValue += enemy.damage.Total()
+			}
+
+			style := components.StylePieChart(state.Theme())
+			style.TextSize = 12
+
+			return style.Layout(
+				gtx,
+				totalValue,
+				pieItems...,
+			)
+		})
+	case DisplayGraphs:
+		controller := victim.timeController
+
+		totalChart := victim.totalChart
+
+		totalChart.DisplayTimeFrame = controller.CurrentTimeFrame
+		totalChart.DisplayValueRange = controller.FullValueRange
+
+		totalChartStyle := components.StyleTimeBasedChart(state.Theme(), totalChart)
+		totalChartStyle.Color = components.StringToColor("Total Damage")
+		totalChartStyle.LongFormat = d.longFormatBool.Value
+
+		widgets = append(widgets, d.drawWidget(state, enemyDamage{
+			name:   "Total Damage",
 			amount: 0,
-			damage: victim.indirectDamage,
-		},
-		victim.indirectDamage.Total(),
-		25,
-	))
+			damage: victim.totalDamage,
+		}, totalChartStyle.Layout, 100))
+
+		for _, enemy := range enemies.enemies {
+			enemy.chart.DisplayTimeFrame = controller.CurrentTimeFrame
+			enemy.chart.DisplayValueRange = enemies.maxRange
+
+			chartStyle := components.StyleTimeBasedChart(state.Theme(), enemy.chart)
+			chartStyle.Color = components.StringToColor(enemy.name)
+			chartStyle.LongFormat = d.longFormatBool.Value
+
+			widgets = append(widgets, d.drawWidget(state, enemy, chartStyle.Layout, 100))
+		}
+	}
 
 	return topWidget, widgets
 }

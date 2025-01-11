@@ -24,7 +24,8 @@ type PieChartItem struct {
 
 func StylePieChart(theme *material.Theme) PieChart {
 	return PieChart{
-		MinHeight: 200,
+		MinHeight:     200,
+		OverflowLimit: 15,
 
 		ColorBoxSize: utils.CommonSpacing * 2,
 		TextSize:     theme.TextSize,
@@ -36,7 +37,8 @@ func StylePieChart(theme *material.Theme) PieChart {
 }
 
 type PieChart struct {
-	MinHeight unit.Dp
+	MinHeight     unit.Dp
+	OverflowLimit int
 
 	ColorBoxSize unit.Dp
 	TextSize     unit.Sp
@@ -53,16 +55,12 @@ func (pc PieChart) legend(
 	items []PieChartItem,
 ) layout.Dimensions {
 	colorBoxSize := gtx.Dp(pc.ColorBoxSize)
-	flexItems := make([]layout.FlexChild, 0, max(len(items)*2-1, 1))
+	widgetItems := make([]layout.Widget, 0, max(len(items), 1))
 
 	for i, item := range items {
 		percentage := float64(item.Value) / floatingTotalValue
 
-		if i != 0 {
-			flexItems = append(flexItems, utils.FlexSpacerH(utils.CommonSpacing))
-		}
-
-		flexItems = append(flexItems, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		widgetItems = append(widgetItems, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{
 				Axis:      layout.Horizontal,
 				Alignment: layout.Middle,
@@ -100,17 +98,38 @@ func (pc PieChart) legend(
 					)
 				}),
 			)
-		}))
+		})
 	}
 
-	return layout.Flex{
-		Axis: layout.Vertical,
-	}.Layout(gtx, flexItems...)
+	if len(items) >= pc.OverflowLimit {
+		return HorizontalWrap{
+			Alignment:   layout.Middle,
+			Spacing:     utils.CommonSpacing,
+			LineSpacing: utils.CommonSpacing,
+		}.Layout(gtx, widgetItems...)
+	} else {
+		flexItems := make([]layout.FlexChild, 0, min(1, len(widgetItems)*2-1))
+
+		for i, item := range widgetItems {
+			if i != 0 {
+				flexItems = append(flexItems, utils.FlexSpacerH(utils.CommonSpacing))
+			}
+
+			flexItems = append(flexItems, layout.Rigid(item))
+		}
+
+		return layout.Flex{
+			Axis: layout.Vertical,
+		}.Layout(gtx, flexItems...)
+	}
+
 }
 
 func (pc PieChart) Layout(gtx layout.Context, totalValue int, items ...PieChartItem) layout.Dimensions {
+	itemsLength := len(items)
+
 	// Say 'No data' if empty
-	if len(items) <= 0 {
+	if itemsLength <= 0 {
 		return Canvas{
 			ExpandHorizontal: true,
 			MinSize: image.Point{
@@ -150,12 +169,21 @@ func (pc PieChart) Layout(gtx layout.Context, totalValue int, items ...PieChartI
 	spacing := gtx.Dp(utils.CommonSpacing)
 	width := gtx.Constraints.Max.X
 
-	horizonalSpace := width - legendDims.Size.X - spacing
-	verticalSpace := max(legendDims.Size.Y, gtx.Dp(pc.MinHeight))
-	pieSize := min(horizonalSpace, verticalSpace)
+	var horizontalSpace, verticalSpace int
+
+	overflowed := itemsLength >= pc.OverflowLimit
+
+	if overflowed {
+		horizontalSpace = width
+		verticalSpace = max(width, gtx.Dp(pc.MinHeight))
+	} else {
+		horizontalSpace = width - spacing - legendDims.Size.X
+		verticalSpace = max(legendDims.Size.Y, gtx.Dp(pc.MinHeight))
+	}
+	pieSize := min(horizontalSpace, verticalSpace)
 
 	// Render pie chart
-	xOffset := horizonalSpace/2 - pieSize/2
+	xOffset := horizontalSpace/2 - pieSize/2
 	yOffset := verticalSpace/2 - pieSize/2
 
 	transOp := op.Offset(image.Point{
@@ -178,17 +206,37 @@ func (pc PieChart) Layout(gtx layout.Context, totalValue int, items ...PieChartI
 	transOp.Pop()
 
 	// Render the legend
-	trans := op.Offset(image.Point{
-		X: horizonalSpace + spacing,
-		Y: verticalSpace/2 - legendDims.Size.Y/2,
-	}).Push(gtx.Ops)
+	var transformOffset image.Point
+	if overflowed {
+		transformOffset = image.Point{
+			X: 0,
+			Y: verticalSpace + spacing,
+		}
+	} else {
+		transformOffset = image.Point{
+			X: horizontalSpace + spacing,
+			Y: verticalSpace/2 - legendDims.Size.Y/2,
+		}
+	}
+
+	trans := op.Offset(transformOffset).Push(gtx.Ops)
 	legendCall.Add(gtx.Ops)
 	trans.Pop()
 
-	return layout.Dimensions{
-		Size: image.Point{
-			X: width,
-			Y: verticalSpace,
-		},
+	if overflowed {
+		return layout.Dimensions{
+			Size: image.Point{
+				X: width,
+				Y: verticalSpace + spacing + legendDims.Size.Y,
+			},
+		}
+	} else {
+		return layout.Dimensions{
+			Size: image.Point{
+				X: width,
+				Y: verticalSpace,
+			},
+		}
 	}
+
 }

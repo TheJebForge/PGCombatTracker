@@ -10,6 +10,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
+	"math"
 	"strings"
 	"unicode"
 )
@@ -75,10 +76,10 @@ func drawUniversalStatsText(
 				},
 			},
 			components.CanvasItem{
-				Anchor: layout.W,
+				Anchor: layout.NW,
 				Offset: image.Point{
 					X: gtx.Dp(utils.CommonSpacing),
-					Y: gtx.Dp(-2.5),
+					Y: gtx.Dp(utils.CommonSpacing),
 				},
 				Widget: func(gtx layout.Context) layout.Dimensions {
 					if amount == 0 {
@@ -96,10 +97,10 @@ func drawUniversalStatsText(
 				},
 			},
 			components.CanvasItem{
-				Anchor: layout.E,
+				Anchor: layout.NE,
 				Offset: image.Point{
 					X: gtx.Dp(-utils.CommonSpacing),
-					Y: gtx.Dp(-2.5),
+					Y: gtx.Dp(utils.CommonSpacing),
 				},
 				Widget: func(gtx layout.Context) layout.Dimensions {
 					return material.Label(state.Theme(), 12, sideText.StringCL(long)).Layout(gtx)
@@ -195,4 +196,51 @@ func (d damageChartChoice) String() string {
 		return "DPS"
 	}
 	return ""
+}
+
+type limitChoice uint8
+
+const (
+	LimitTop5 limitChoice = iota
+	LimitTop10
+	LimitTop15
+	LimitTop25
+	LimitTop50
+	NoLimit
+)
+
+func (l limitChoice) String() string {
+	switch l {
+	case LimitTop5:
+		return "Top 5"
+	case LimitTop10:
+		return "Top 10"
+	case LimitTop15:
+		return "Top 15"
+	case LimitTop25:
+		return "Top 25"
+	case LimitTop50:
+		return "Top 50"
+	case NoLimit:
+		return "No limit"
+	}
+	return ""
+}
+
+func (l limitChoice) Int() int {
+	switch l {
+	case LimitTop5:
+		return 5
+	case LimitTop10:
+		return 10
+	case LimitTop15:
+		return 15
+	case LimitTop25:
+		return 25
+	case LimitTop50:
+		return 50
+	case NoLimit:
+		return math.MaxInt
+	}
+	return 0
 }

@@ -120,7 +120,7 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 	findSkillDamage := func(skill skillDamage) bool {
 		return skill.name == skillName
 	}
-	createSkillDamage := func(subject subjectiveDamageDealt) func() skillDamage {
+	createSkillDamage := func(subject *subjectiveDamageDealt) func() skillDamage {
 		return func() skillDamage {
 			totalChart := components.NewTimeBasedChart(skillName)
 			totalChart.Add(components.TimePoint{
@@ -168,23 +168,27 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 		return cmp.Compare(b.damage.Total(), a.damage.Total())
 	}
 
-	// Ingest total stuff
-	d.total.totalDamage = d.total.totalDamage.Add(*skillUse.Damage)
-	d.total.totalChart.Add(components.TimePoint{
-		Time:  event.Time,
-		Value: d.total.totalDamage.Total(),
-	})
-	d.total.dpsCalculator.Add(event.Time, skillUse.Damage.Total())
-	d.total.skillDamage = utils.CreateUpdate(
-		d.total.skillDamage,
-		findSkillDamage,
-		createSkillDamage(d.total),
-		updateSkillDamage,
-	)
-	d.total.maxDamage = slices.MaxFunc(d.total.skillDamage, skillDamageMax).damage
-	d.total.totalMaxRange = d.total.totalMaxRange.Expand(d.total.maxDamage.Total())
+	processSubjectiveDD := func(subject *subjectiveDamageDealt) {
+		subject.totalDamage = subject.totalDamage.Add(*skillUse.Damage)
+		subject.totalChart.Add(components.TimePoint{
+			Time:  event.Time,
+			Value: subject.totalDamage.Total(),
+		})
+		subject.dpsCalculator.Add(event.Time, skillUse.Damage.Total())
+		subject.skillDamage = utils.CreateUpdate(
+			subject.skillDamage,
+			findSkillDamage,
+			createSkillDamage(subject),
+			updateSkillDamage,
+		)
+		subject.maxDamage = slices.MaxFunc(subject.skillDamage, skillDamageMax).damage
+		subject.totalMaxRange = subject.totalMaxRange.Expand(subject.maxDamage.Total())
 
-	slices.SortFunc(d.total.skillDamage, skillDamageSort)
+		slices.SortFunc(subject.skillDamage, skillDamageSort)
+	}
+
+	// Ingest total stuff
+	processSubjectiveDD(&d.total)
 
 	// Ingest individual stuff
 	d.subjects = utils.CreateUpdate(
@@ -224,30 +228,13 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 			}
 
 			subject.skillDamage = []skillDamage{
-				createSkillDamage(subject)(),
+				createSkillDamage(&subject)(),
 			}
 
 			return subject
 		},
 		func(subject subjectiveDamageDealt) subjectiveDamageDealt {
-			subject.totalDamage = subject.totalDamage.Add(*skillUse.Damage)
-			subject.totalChart.Add(components.TimePoint{
-				Time:  event.Time,
-				Value: subject.totalDamage.Total(),
-			})
-			subject.dpsCalculator.Add(event.Time, skillUse.Damage.Total())
-
-			subject.skillDamage = utils.CreateUpdate(
-				subject.skillDamage,
-				findSkillDamage,
-				createSkillDamage(subject),
-				updateSkillDamage,
-			)
-			subject.maxDamage = slices.MaxFunc(subject.skillDamage, skillDamageMax).damage
-			subject.totalMaxRange = subject.totalMaxRange.Expand(subject.maxDamage.Total())
-
-			slices.SortFunc(subject.skillDamage, skillDamageSort)
-
+			processSubjectiveDD(&subject)
 			return subject
 		},
 	)
@@ -415,14 +402,25 @@ func (d *DamageDealtCollector) UI(state abstract.LayeredState) (layout.Widget, [
 					},
 				)
 			}),
-			utils.FlexSpacerH(utils.CommonSpacing),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				if d.currentDisplay == DisplayGraphs {
-					if d.currentChartView == DamageChart {
-						return components.StyleTimeController(state.Theme(), subject.totalChart).Layout(gtx)
-					} else {
-						return components.StyleTimeController(state.Theme(), subject.dpsChart).Layout(gtx)
-					}
+					return layout.Flex{
+						Axis: layout.Vertical,
+					}.Layout(
+						gtx,
+						utils.FlexSpacerH(utils.CommonSpacing),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if d.currentDisplay == DisplayGraphs {
+								if d.currentChartView == DamageChart {
+									return components.StyleTimeController(state.Theme(), subject.totalChart).Layout(gtx)
+								} else {
+									return components.StyleTimeController(state.Theme(), subject.dpsChart).Layout(gtx)
+								}
+							}
+
+							return layout.Dimensions{}
+						}),
+					)
 				}
 
 				return layout.Dimensions{}
