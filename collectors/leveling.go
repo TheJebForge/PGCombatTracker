@@ -10,6 +10,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
+	"image"
 	"log"
 	"slices"
 	"time"
@@ -230,4 +231,8 @@ func (l *LevelingCollector) UI(state abstract.LayeredState) (layout.Widget, []la
 	}
 
 	return topWidget, widgets
+}
+
+func (l *LevelingCollector) Export(state abstract.LayeredState) image.Image {
+	return image.NewNRGBA(image.Rectangle{Max: image.Point{X: 4, Y: 4}})
 }

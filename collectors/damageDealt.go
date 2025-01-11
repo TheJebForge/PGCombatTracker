@@ -4,12 +4,14 @@ import (
 	"PGCombatTracker/abstract"
 	"PGCombatTracker/ui/components"
 	"PGCombatTracker/utils"
+	"PGCombatTracker/utils/drawing"
 	"cmp"
 	"fmt"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
+	"image"
 	"log"
 	"slices"
 	"strings"
@@ -533,4 +535,252 @@ func (d *DamageDealtCollector) UI(state abstract.LayeredState) (layout.Widget, [
 	}
 
 	return topWidget, widgets
+}
+
+func (d *DamageDealtCollector) Export(state abstract.LayeredState) image.Image {
+	longFormat := d.longFormatBool.Value
+	subject := d.total
+
+	styledFonts := drawing.StyleFontPack(state.FontPack(), state.Theme().Fg)
+
+	body := drawing.Empty
+
+	switch d.currentDisplay {
+	case DisplayBars:
+		items := make([]drawing.FlexChild, 0, len(subject.skillDamage)*2-1+4)
+
+		maxDamage := float64(subject.maxDamage.Total())
+
+		name := "Total Damage"
+		items = append(
+			items,
+			drawing.Rigid(
+				drawing.RoundedSurface(
+					components.StringToColor(name),
+					drawing.Flex{
+						Alignment: layout.Middle,
+						ExpandW:   true,
+					}.Layout(
+						drawing.Rigid(drawing.Flex{
+							Axis: layout.Vertical,
+						}.Layout(
+							drawing.Rigid(styledFonts.Body.Layout(name)),
+						)),
+						drawing.Flexer(1),
+						drawing.Rigid(styledFonts.Body.Layout(subject.totalDamage.StringCL(longFormat))),
+					),
+				),
+			),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		for i, skill := range subject.skillDamage {
+			if i != 0 {
+				items = append(items, drawing.FlexVSpacer(drawing.CommonSpacing))
+			}
+
+			percent := float64(skill.damage.Total()) / maxDamage
+
+			items = append(items, drawing.Rigid(drawing.CustomSurface(
+				percentBar(percent, components.StringToColor(skill.name)),
+				drawing.Flex{
+					Alignment: layout.Middle,
+					ExpandW:   true,
+				}.Layout(
+					drawing.Rigid(drawing.Flex{
+						Axis: layout.Vertical,
+					}.Layout(
+						drawing.Rigid(styledFonts.Body.Layout(skill.name)),
+						drawing.FlexVSpacer(drawing.CommonSpacing),
+						drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf("used %d times", skill.amount))),
+					)),
+					drawing.Flexer(1),
+					drawing.Rigid(styledFonts.Body.Layout(skill.damage.StringCL(longFormat))),
+				),
+			)))
+		}
+
+		name = "Indirect Damage"
+		items = append(
+			items,
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+			drawing.Rigid(
+				drawing.RoundedSurface(
+					components.StringToColor(name),
+					drawing.Flex{
+						Alignment: layout.Middle,
+						ExpandW:   true,
+					}.Layout(
+						drawing.Rigid(drawing.Flex{
+							Axis: layout.Vertical,
+						}.Layout(
+							drawing.Rigid(styledFonts.Body.Layout(name)),
+						)),
+						drawing.Flexer(1),
+						drawing.Rigid(styledFonts.Body.Layout(subject.indirectDamage.StringCL(longFormat))),
+					),
+				),
+			),
+		)
+
+		body = drawing.Flex{
+			ExpandW: true,
+			Axis:    layout.Vertical,
+		}.Layout(
+			items...,
+		)
+	case DisplayPie:
+		totalValue := subject.totalDamage.Total()
+
+		pieItems := make([]drawing.PieChartItem, len(subject.skillDamage))
+		for i, skill := range subject.skillDamage {
+			pieItems[i] = drawing.PieChartItem{
+				Name:    skill.name,
+				Value:   skill.damage.Total(),
+				SubText: skill.damage.StringCL(d.longFormatBool.Value),
+			}
+		}
+
+		style := drawing.PieChart{
+			ColorBoxSize: drawing.CommonSpacing * 4,
+			TextStyle:    styledFonts.Body,
+			SubTextStyle: drawing.MakeTextStyle(styledFonts.Smaller.Face, utils.GrayText),
+		}
+
+		body = style.Layout(totalValue, pieItems...)
+	case DisplayGraphs:
+		items := make([]drawing.FlexChild, 0, len(subject.skillDamage)*2-1+6)
+
+		items = append(
+			items,
+			drawing.Rigid(drawing.RoundedSurface(utils.LesserContrastBg, drawing.Flex{
+				Axis:      layout.Horizontal,
+				Alignment: layout.Middle,
+				ExpandW:   true,
+			}.Layout(
+				drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf(
+					"Data from %v",
+					subject.totalChart.CurrentTimeFrame.From.Format(time.DateTime),
+				))),
+				drawing.Flexer(1),
+				drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf(
+					"to %v",
+					subject.totalChart.CurrentTimeFrame.To.Format(time.DateTime),
+				))),
+			))),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		name := "Total Damage"
+		items = append(
+			items,
+			drawing.Rigid(
+				drawing.RoundedSurface(
+					components.StringToColor(name),
+					drawing.Flex{
+						Alignment: layout.Middle,
+						ExpandW:   true,
+					}.Layout(
+						drawing.Rigid(drawing.Flex{
+							Axis: layout.Vertical,
+						}.Layout(
+							drawing.Rigid(styledFonts.Body.Layout(name)),
+						)),
+						drawing.Flexer(1),
+						drawing.Rigid(styledFonts.Body.Layout(subject.totalDamage.StringCL(longFormat))),
+					),
+				),
+			),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		stackedChart := subject.stackedTotalChart
+		if d.currentChartView == DPSChart {
+			stackedChart = subject.stackedDpsChart
+		}
+
+		items = append(
+			items,
+			drawing.Rigid(
+				drawing.StyleStackedAreaChart(styledFonts, stackedChart).Layout(),
+			),
+			drawing.FlexVSpacer(drawing.CommonSpacing),
+		)
+
+		for i, skill := range subject.skillDamage {
+			if i != 0 {
+				items = append(items, drawing.FlexVSpacer(drawing.CommonSpacing))
+			}
+
+			skillChart := skill.totalChart
+			if d.currentChartView == DPSChart {
+				skillChart = skill.dpsChart
+			}
+
+			style := drawing.StyleAreaChart(skillChart, components.StringToColor(skill.name))
+			style.MinHeight = 200
+
+			items = append(items, drawing.Rigid(
+				drawing.Stack{
+					Alignment: layout.Center,
+					Wide:      true,
+				}.Layout(
+					style.Layout(),
+					drawing.UniformInset(drawing.CommonSpacing*2).Layout(drawing.Flex{
+						Alignment: layout.Middle,
+						ExpandW:   true,
+					}.Layout(
+						drawing.Rigid(drawing.Flex{
+							Axis: layout.Vertical,
+						}.Layout(
+							drawing.Rigid(styledFonts.Body.Layout(skill.name)),
+							drawing.FlexVSpacer(drawing.CommonSpacing),
+							drawing.Rigid(styledFonts.Smaller.Layout(fmt.Sprintf("used %d times", skill.amount))),
+						)),
+						drawing.Flexer(1),
+						drawing.Rigid(styledFonts.Body.Layout(skill.damage.StringCL(longFormat))),
+					)),
+				),
+			))
+		}
+
+		body = drawing.Flex{
+			ExpandW: true,
+			Axis:    layout.Vertical,
+		}.Layout(
+			items...,
+		)
+	}
+
+	base := layoutTitle(
+		styledFonts,
+		d.TabName(),
+		drawing.HorizontalWrap{
+			Alignment:   layout.Middle,
+			Spacing:     drawing.CommonSpacing * 3,
+			LineSpacing: drawing.CommonSpacing,
+		}.Layout(
+			func(ltx drawing.Context) drawing.Result {
+				if d.currentSubject != "" {
+					return styledFonts.Smaller.Layout(fmt.Sprintf("Subject: %v", d.currentSubject))(ltx)
+				}
+
+				return styledFonts.Smaller.Layout("Subject: All")(ltx)
+			},
+			styledFonts.Smaller.Layout(fmt.Sprintf("Display: %v", d.currentDisplay)),
+			func(ltx drawing.Context) drawing.Result {
+				if d.currentDisplay == DisplayGraphs {
+					return styledFonts.Smaller.Layout(fmt.Sprintf("%v Chart", d.currentChartView))(ltx)
+				}
+
+				return drawing.Empty(ltx)
+			},
+		),
+		drawing.RoundedSurface(
+			utils.SecondBG,
+			body,
+		),
+	)
+
+	return drawing.ExportImage(state.Theme(), base, drawing.F64(800, 10000))
 }

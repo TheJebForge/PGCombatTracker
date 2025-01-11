@@ -24,6 +24,7 @@ type GlobalState struct {
 	storage             map[string]any
 	window              *app.Window
 	theme               *material.Theme
+	fonts               *abstract.FontPack
 	draggable           bool
 }
 
@@ -50,6 +51,11 @@ func NewGlobalState(window *app.Window, factory abstract.StatisticsFactory) (abs
 		log.Printf("Failed to load %v, starting fresh. Reason: %v\n", MarkersLocation, err)
 	}
 
+	fonts, err := abstract.LoadFontPack()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	return &GlobalState{
 		settings:          sett,
 		markers:           markers,
@@ -58,6 +64,7 @@ func NewGlobalState(window *app.Window, factory abstract.StatisticsFactory) (abs
 		storage:           make(map[string]any),
 		window:            window,
 		theme:             theme,
+		fonts:             fonts,
 		draggable:         true,
 	}, nil
 }
@@ -209,6 +216,10 @@ func (g *GlobalState) Window() *app.Window {
 
 func (g *GlobalState) Theme() *material.Theme {
 	return g.theme
+}
+
+func (g *GlobalState) FontPack() *abstract.FontPack {
+	return g.fonts
 }
 
 func (g *GlobalState) SwitchPage(page abstract.Page) {

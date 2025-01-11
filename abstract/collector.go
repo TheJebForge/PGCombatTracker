@@ -2,6 +2,7 @@ package abstract
 
 import (
 	"gioui.org/layout"
+	"image"
 	"time"
 )
 
@@ -11,4 +12,5 @@ type Collector interface {
 	Collect(info StatisticsInformation, event *ChatEvent) error
 	TabName() string
 	UI(state LayeredState) (layout.Widget, []layout.Widget)
+	Export(state LayeredState) image.Image
 }

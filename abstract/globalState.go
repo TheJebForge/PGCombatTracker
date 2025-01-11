@@ -17,6 +17,7 @@ type GlobalState interface {
 	Storage() map[string]any
 	Window() *app.Window
 	Theme() *material.Theme
+	FontPack() *FontPack
 
 	CanBeDragged() bool
 	SetWindowDrag(value bool)

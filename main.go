@@ -8,12 +8,18 @@ import (
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"golang.design/x/clipboard"
 	"log"
 	"os"
 	"time"
 )
 
 func main() {
+	err := clipboard.Init()
+	if err != nil {
+		panic(err)
+	}
+
 	go func() {
 		window := new(app.Window)
 

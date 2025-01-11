@@ -10,6 +10,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
+	"image"
 	"log"
 	"slices"
 	"strings"
@@ -391,4 +392,8 @@ func (d *DamageTakenCollector) UI(state abstract.LayeredState) (layout.Widget, [
 	))
 
 	return topWidget, widgets
+}
+
+func (d *DamageTakenCollector) Export(state abstract.LayeredState) image.Image {
+	return image.NewNRGBA(image.Rectangle{Max: image.Point{X: 4, Y: 4}})
 }

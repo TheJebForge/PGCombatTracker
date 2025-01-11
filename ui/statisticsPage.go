@@ -4,6 +4,7 @@ import (
 	"PGCombatTracker/abstract"
 	"PGCombatTracker/ui/components"
 	"PGCombatTracker/utils"
+	"bytes"
 	"fmt"
 	"gioui.org/app"
 	"gioui.org/io/system"
@@ -13,8 +14,10 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"github.com/samber/lo"
+	"golang.design/x/clipboard"
 	"golang.org/x/exp/shiny/materialdesign/icons"
 	"image"
+	"image/png"
 	"log"
 )
 
@@ -34,6 +37,8 @@ type StatisticsPage struct {
 	lockButton        *widget.Clickable
 	lockIcon          *widget.Icon
 	unlockIcon        *widget.Icon
+	copyIcon          *widget.Icon
+	copyButton        *widget.Clickable
 	collectorDropdown *components.Dropdown
 	collectorBody     *widget.List
 }
@@ -86,6 +91,12 @@ func NewStatisticsPage(state abstract.GlobalState, filePath string) (*Statistics
 		return nil, err
 	}
 
+	copyIcon, err := widget.NewIcon(icons.ContentContentCopy)
+
+	if err != nil {
+		return nil, err
+	}
+
 	collectorDropdown, err := components.NewDropdown("Page", CollectorPageIndex{})
 
 	if err != nil {
@@ -117,6 +128,8 @@ func NewStatisticsPage(state abstract.GlobalState, filePath string) (*Statistics
 		lockButton:        &widget.Clickable{},
 		lockIcon:          lockIcon,
 		unlockIcon:        unlockIcon,
+		copyIcon:          copyIcon,
+		copyButton:        &widget.Clickable{},
 		collectorDropdown: collectorDropdown,
 		collectorBody:     getFreshCollectorBody(),
 	}, nil
@@ -197,6 +210,8 @@ func (s *StatisticsPage) navBar(state abstract.LayeredState) layout.Widget {
 						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Rigid(navIconButton(state, s.addButton, s.addIcon, "Add").Layout),
 						utils.FlexSpacerW(utils.CommonSpacing),
+						layout.Rigid(navIconButton(state, s.copyButton, s.copyIcon, "Copy").Layout),
+						utils.FlexSpacerW(utils.CommonSpacing),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							if s.collectorDropdown.Changed() {
 								value := s.collectorDropdown.Value.(CollectorPageIndex)
@@ -242,21 +257,23 @@ func (s *StatisticsPage) navBar(state abstract.LayeredState) layout.Widget {
 	}
 }
 
-func (s *StatisticsPage) body(state abstract.LayeredState) layout.Widget {
+func (s *StatisticsPage) exportToClipboard(state abstract.LayeredState, collector abstract.Collector) {
+	buf := &bytes.Buffer{}
+
+	img := collector.Export(state)
+
+	err := png.Encode(buf, img)
+	if err != nil {
+		log.Println("Failed to export image", err)
+		return
+	}
+
+	clipboard.Write(clipboard.FmtImage, buf.Bytes())
+}
+
+func (s *StatisticsPage) body(state abstract.LayeredState, currentCollector abstract.Collector) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		stats := state.StatisticsCollector()
-		lock := stats.Mutex()
-
-		lock.RLock()
-		defer lock.RUnlock()
-
-		collectors := stats.Collectors()
-
-		if s.currentCollector >= len(collectors) {
-			return layout.Dimensions{}
-		}
-
-		top, body := collectors[s.currentCollector].UI(state)
+		top, body := currentCollector.UI(state)
 
 		return layout.Flex{
 			Axis: layout.Vertical,
@@ -318,12 +335,35 @@ func (s *StatisticsPage) Layout(ctx layout.Context, state abstract.GlobalState) 
 	layeredState := NewLayeredState(state, s.modalLayer)
 
 	s.modalLayer.Overlay(func(gtx layout.Context) layout.Dimensions {
+		stats := state.StatisticsCollector()
+		lock := stats.Mutex()
+
+		lock.RLock()
+		defer lock.RUnlock()
+
+		collectors := stats.Collectors()
+
+		if s.currentCollector < len(collectors) {
+			currentCollector := collectors[s.currentCollector]
+
+			if s.copyButton.Clicked(gtx) {
+				log.Println("trying to copy to clipboard")
+				s.exportToClipboard(layeredState, currentCollector)
+			}
+		}
+
 		return layout.Flex{
 			Axis: layout.Vertical,
 		}.Layout(
 			ctx,
 			layout.Rigid(s.navBar(layeredState)),
-			layout.Flexed(1, s.body(layeredState)),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				if s.currentCollector >= len(collectors) {
+					return layout.Dimensions{}
+				}
+
+				return s.body(layeredState, collectors[s.currentCollector])(gtx)
+			}),
 		)
 	})(ctx)
 

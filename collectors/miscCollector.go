@@ -6,6 +6,7 @@ import (
 	"PGCombatTracker/utils"
 	"fmt"
 	"gioui.org/layout"
+	"image"
 	"log"
 	"strings"
 	"time"
@@ -222,4 +223,8 @@ func (m *MiscCollector) UI(state abstract.LayeredState) (layout.Widget, []layout
 	)
 
 	return topWidget, widgets
+}
+
+func (m *MiscCollector) Export(state abstract.LayeredState) image.Image {
+	return image.NewNRGBA(image.Rectangle{Max: image.Point{X: 4, Y: 4}})
 }

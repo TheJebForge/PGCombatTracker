@@ -9,6 +9,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
+	"image"
 	"log"
 	"slices"
 	"strings"
@@ -267,4 +268,8 @@ func (h *HealingCollector) UI(state abstract.LayeredState) (layout.Widget, []lay
 	}
 
 	return topWidget, widgets
+}
+
+func (h *HealingCollector) Export(state abstract.LayeredState) image.Image {
+	return image.NewNRGBA(image.Rectangle{Max: image.Point{X: 4, Y: 4}})
 }

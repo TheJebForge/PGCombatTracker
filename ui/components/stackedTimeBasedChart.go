@@ -141,8 +141,7 @@ func InterpolatedTimePoint(points []TimePoint, target time.Time) TimePoint {
 	}
 }
 
-func (stc *StackedTimeBasedChart) RecalculatePoints(tolerance float32, width, height int) {
-	//startTime := time.Now()
+func (stc *StackedTimeBasedChart) CalculatePoints(tolerance float32, width, height int) ([]StackedBreakdown, [][]f32.Point) {
 	sourceLines := make([][]f32.Point, 0, len(stc.Sources))
 
 	allLocations := 0
@@ -210,10 +209,13 @@ func (stc *StackedTimeBasedChart) RecalculatePoints(tolerance float32, width, he
 		breakdowns[xI] = breakdown
 	}
 
+	return breakdowns, newLines
+}
+
+func (stc *StackedTimeBasedChart) RecalculatePoints(tolerance float32, width, height int) {
+	breakdowns, newLines := stc.CalculatePoints(tolerance, width, height)
 	stc.CalculatedBreakdown = breakdowns
 	stc.CalculatedLines = newLines
-
-	//log.Println("time point calculation", time.Now().Sub(startTime))
 }
 
 func StyleStackedTimeBasedChart(theme *material.Theme, chart *StackedTimeBasedChart) StackedTimeBasedChartStyle {
