@@ -76,11 +76,6 @@ func NewDamageTakenCollector() *DamageTakenCollector {
 		NoLimit,
 	)
 
-	timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 	return &DamageTakenCollector{
 		groupByDropdown: groupByDropdown,
 		victimDropdown:  victimDropdown,
@@ -88,7 +83,7 @@ func NewDamageTakenCollector() *DamageTakenCollector {
 		displayDropdown: displayDropdown,
 		limitDropdown:   limitDropdown,
 		total: subjectiveDamageTaken{
-			timeController: timeController,
+			timeController: components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total")),
 			totalChart:     components.NewTimeBasedChart("Total"),
 		},
 	}
@@ -112,14 +107,9 @@ type DamageTakenCollector struct {
 }
 
 func (d *DamageTakenCollector) Reset(info abstract.StatisticsInformation) {
-	timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 	d.victims = nil
 	d.total = subjectiveDamageTaken{
-		timeController: timeController,
+		timeController: components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total")),
 		totalChart:     components.NewTimeBasedChart("Total"),
 	}
 	d.registeredPets = nil
@@ -216,10 +206,7 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 		func() subjectiveDamageTaken {
 			totalDamage := *skillUse.Damage
 
-			timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
-			if err != nil {
-				log.Fatalln(err)
-			}
+			timeController := components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total"))
 			totalChart := components.NewTimeBasedChart("Total")
 			point := components.TimePoint{
 				Time:    event.Time,
@@ -237,12 +224,14 @@ func (d *DamageTakenCollector) ingestDamage(event *abstract.ChatEvent) {
 						createEnemyDamage(false)(),
 					},
 					maxDamage: *skillUse.Damage,
+					maxRange:  components.DataRange{Max: skillUse.Damage.Total()},
 				},
 				damageFromEnemyTypes: enemyDamageWithMax{
 					enemies: []enemyDamage{
 						createEnemyDamage(true)(),
 					},
 					maxDamage: *skillUse.Damage,
+					maxRange:  components.DataRange{Max: skillUse.Damage.Total()},
 				},
 				timeController: timeController,
 				totalChart:     totalChart,
@@ -281,15 +270,38 @@ func (d *DamageTakenCollector) ingestIndirectDamage(event *abstract.ChatEvent) {
 			return victim.victim == indirect.Subject
 		},
 		func() subjectiveDamageTaken {
+			totalDamage := indirect.Damage
+
+			timeController := components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total"))
+			totalChart := components.NewTimeBasedChart("Total")
+			point := components.TimePoint{
+				Time:    event.Time,
+				Value:   totalDamage.Total(),
+				Details: totalDamage,
+			}
+			timeController.Add(point)
+			totalChart.Add(point)
+
 			return subjectiveDamageTaken{
 				victim:         indirect.Subject,
-				totalDamage:    indirect.Damage,
-				indirectDamage: indirect.Damage,
+				totalDamage:    totalDamage,
+				indirectDamage: totalDamage,
+				timeController: timeController,
+				totalChart:     totalChart,
 			}
 		},
 		func(victim subjectiveDamageTaken) subjectiveDamageTaken {
 			victim.totalDamage = victim.totalDamage.Add(indirectDamage)
 			victim.indirectDamage = victim.indirectDamage.Add(indirectDamage)
+
+			point := components.TimePoint{
+				Time:    event.Time,
+				Value:   victim.totalDamage.Total(),
+				Details: victim.totalDamage,
+			}
+
+			victim.timeController.Add(point)
+			victim.totalChart.Add(point)
 
 			return victim
 		},
@@ -370,7 +382,7 @@ func (d *DamageTakenCollector) drawWidget(state abstract.LayeredState, enemy ene
 	return drawUniversalStatsText(
 		state, enemy.damage,
 		widget, enemy.amount,
-		enemy.name, "used %v times",
+		enemy.name, "attacked %v times",
 		size, d.longFormatBool.Value,
 	)
 }
@@ -559,7 +571,7 @@ func (d *DamageTakenCollector) exportWidget(styledFonts *drawing.StyledFontPack,
 	return exportUniversalStatsTextAsStack(
 		styledFonts, enemy.damage,
 		widget, enemy.amount,
-		enemy.name, "used %v times",
+		enemy.name, "attacked %v times",
 		d.longFormatBool.Value,
 	)
 }
@@ -568,7 +580,7 @@ func (d *DamageTakenCollector) exportBar(styledFonts *drawing.StyledFontPack, en
 	return exportUniversalBar(
 		styledFonts, enemy.damage,
 		enemy.damage.Total(), maxDamage, enemy.amount,
-		enemy.name, "used %v times",
+		enemy.name, "attacked %v times",
 		d.longFormatBool.Value,
 	)
 }

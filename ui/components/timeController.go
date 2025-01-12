@@ -16,6 +16,7 @@ import (
 	"golang.org/x/exp/shiny/materialdesign/icons"
 	"image"
 	"image/color"
+	"log"
 	"math"
 	"time"
 )
@@ -26,6 +27,14 @@ const (
 	OverviewTimeMode TimeMode = iota
 	RealTimeMode
 )
+
+func NewTimeControllerOrCrash(baseChart *TimeBasedChart) *TimeController {
+	timeController, err := NewTimeController(baseChart)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return timeController
+}
 
 func NewTimeController(baseChart *TimeBasedChart) (*TimeController, error) {
 	overviewIcon, err := widget.NewIcon(icons.ActionTimeline)

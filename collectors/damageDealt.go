@@ -69,15 +69,7 @@ func NewDamageDealtCollector(settings *abstract.Settings) *DamageDealtCollector 
 		DPSChart,
 	)
 
-	timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	dpsTimeController, err := components.NewTimeController(components.NewTimeBasedChart("Total DPS"))
-	if err != nil {
-		log.Fatalln(err)
-	}
+	dpsTimeController := components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total DPS"))
 
 	return &DamageDealtCollector{
 		subjectDropdown: subjectDropdown,
@@ -85,7 +77,7 @@ func NewDamageDealtCollector(settings *abstract.Settings) *DamageDealtCollector 
 		chartDropdown:   chartDropdown,
 		longFormatBool:  &widget.Bool{},
 		total: subjectiveDamageDealt{
-			totalChart:        timeController,
+			totalChart:        components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total")),
 			stackedTotalChart: components.NewStackedTimeBasedChart(),
 			dpsChart:          dpsTimeController,
 			stackedDpsChart:   components.NewStackedTimeBasedChart(),
@@ -261,19 +253,11 @@ func (d *DamageDealtCollector) ingestIndirect(event *abstract.ChatEvent) {
 }
 
 func (d *DamageDealtCollector) Reset(info abstract.StatisticsInformation) {
-	timeController, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	dpsTimeController, err := components.NewTimeController(components.NewTimeBasedChart("Total DPS"))
-	if err != nil {
-		log.Fatalln(err)
-	}
+	dpsTimeController := components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total DPS"))
 
 	d.subjects = nil
 	d.total = subjectiveDamageDealt{
-		totalChart:        timeController,
+		totalChart:        components.NewTimeControllerOrCrash(components.NewTimeBasedChart("Total")),
 		stackedTotalChart: components.NewStackedTimeBasedChart(),
 		dpsChart:          dpsTimeController,
 		stackedDpsChart:   components.NewStackedTimeBasedChart(),
