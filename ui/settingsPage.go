@@ -2,6 +2,7 @@ package ui
 
 import (
 	"PGCombatTracker/abstract"
+	"PGCombatTracker/ui/components"
 	"PGCombatTracker/utils"
 	"fmt"
 	"gioui.org/app"
@@ -32,6 +33,7 @@ func NewSettingsPage() *SettingsPage {
 	}
 
 	return &SettingsPage{
+		modalLayer: components.NewModalLayer(),
 		backIcon:   backIcon,
 		backButton: &widget.Clickable{},
 		addIcon:    addIcon,
@@ -45,6 +47,7 @@ func NewSettingsPage() *SettingsPage {
 }
 
 type SettingsPage struct {
+	modalLayer      *components.ModalLayer
 	backIcon        *widget.Icon
 	backButton      *widget.Clickable
 	addIcon         *widget.Icon
@@ -409,13 +412,43 @@ func (s *SettingsPage) reflectField(state abstract.GlobalState, field reflect.Va
 	}
 }
 
-func (s *SettingsPage) reflect(state abstract.GlobalState) []layout.Widget {
+func (s *SettingsPage) reflect(state abstract.LayeredState) []layout.Widget {
 	settings := state.Settings()
 
 	reflected := reflect.ValueOf(settings).Elem()
 	reflectedType := reflected.Type()
 
 	var widgets []layout.Widget
+
+	// Theme selector
+	{
+		options := abstract.PGCTThemeOptions()
+
+		dropdown, err := components.NewDropdown(
+			"Theme:",
+			options[0],
+			options[1:]...,
+		)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		dropdown.SetValue(settings.Theme)
+
+		widgets = append(widgets, func(gtx layout.Context) layout.Dimensions {
+			if dropdown.Changed() {
+				newTheme := dropdown.Value.(abstract.PGCTThemeSelection)
+				settings.Theme = newTheme
+				state.SaveSettings()
+				newTheme.Theme().Apply(state.Theme())
+			}
+
+			style := components.StyleDropdown(state.Theme(), state.ModalLayer(), dropdown)
+			style.TextSize = 14
+			style.Inset = layout.UniformInset(utils.CommonSpacing)
+			return style.Layout(gtx)
+		})
+	}
 
 	for i := 0; i < reflected.NumField(); i++ {
 		field := reflected.Field(i)
@@ -458,7 +491,7 @@ func (s *SettingsPage) navBar(state abstract.GlobalState) layout.Widget {
 	}
 }
 
-func (s *SettingsPage) body(state abstract.GlobalState) layout.Widget {
+func (s *SettingsPage) body(state abstract.LayeredState) layout.Widget {
 	if !s.initialized {
 		s.initialized = true
 		s.settingsWidgets = s.reflect(state)
@@ -491,13 +524,17 @@ func (s *SettingsPage) body(state abstract.GlobalState) layout.Widget {
 }
 
 func (s *SettingsPage) Layout(ctx layout.Context, state abstract.GlobalState) error {
-	layout.Flex{
-		Axis: layout.Vertical,
-	}.Layout(
-		ctx,
-		layout.Rigid(s.navBar(state)),
-		layout.Flexed(1, s.body(state)),
-	)
+	layeredState := NewLayeredState(state, s.modalLayer)
+
+	s.modalLayer.Overlay(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis: layout.Vertical,
+		}.Layout(
+			ctx,
+			layout.Rigid(s.navBar(layeredState)),
+			layout.Flexed(1, s.body(layeredState)),
+		)
+	})(ctx)
 
 	return nil
 }

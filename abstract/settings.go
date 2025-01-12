@@ -1,6 +1,7 @@
 package abstract
 
 type Settings struct {
+	Theme                   PGCTThemeSelection
 	TickIntervalSeconds     float64
 	SecondsUntilDPSReset    int
 	RemoveLevelsFromSkills  bool

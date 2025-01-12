@@ -631,9 +631,7 @@ func (sts StackedTimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensio
 			Y: float32(chartSize.Y),
 		})
 
-		paint.FillShape(gtx.Ops, color.NRGBA{
-			R: 255, G: 255, B: 255, A: 20,
-		}, clip.Stroke{
+		paint.FillShape(gtx.Ops, utils.ChartLineColor, clip.Stroke{
 			Path:  line.End(),
 			Width: 2,
 		}.Op())

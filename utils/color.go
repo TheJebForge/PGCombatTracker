@@ -26,3 +26,11 @@ func AverageColor(colors ...color.NRGBA) color.NRGBA {
 		A: uint8(a),
 	}
 }
+
+func RGB(c uint32) color.NRGBA {
+	return ARGB(0xff000000 | c)
+}
+
+func ARGB(c uint32) color.NRGBA {
+	return color.NRGBA{A: uint8(c >> 24), R: uint8(c >> 16), G: uint8(c >> 8), B: uint8(c)}
+}

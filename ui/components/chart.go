@@ -1,6 +1,7 @@
 package components
 
 import (
+	"PGCombatTracker/utils"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
@@ -20,8 +21,8 @@ func seedHash(txt string) int64 {
 }
 
 func StringToColor(txt string) color.NRGBA {
-	const low = 60
-	const ran = 50
+	var low = utils.RandomColorBase
+	var ran = utils.RandomColorWidth
 
 	r := rand.New(rand.NewSource(seedHash(txt)))
 

@@ -152,8 +152,8 @@ func (tc *TimeController) RecalculateTimeFrame() {
 func StyleTimeController(theme *material.Theme, controller *TimeController) TimeControllerStyle {
 	return TimeControllerStyle{
 		HandleThickness:      3,
-		HandleColor:          color.NRGBA{R: 80, G: 80, B: 80, A: 255},
-		SelectionColor:       color.NRGBA{G: 255, B: 255, A: 50},
+		HandleColor:          utils.LessContrastBg,
+		SelectionColor:       utils.ChartSelectionColor,
 		MinHeight:            40,
 		OverviewChartStyle:   StyleTimeBasedChart(theme, controller.BaseChart),
 		PixelUpdateThreshold: 3,

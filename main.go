@@ -44,6 +44,8 @@ func run(window *app.Window) error {
 		},
 	)
 
+	state.Settings().Theme.Theme().Apply(state.Theme())
+
 	if err != nil {
 		return err
 	}

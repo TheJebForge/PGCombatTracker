@@ -68,6 +68,14 @@ func (d *Dropdown) SetOptions(options []fmt.Stringer) {
 	d.itemButtons = utils.MakeClickableArray(len(options))
 }
 
+func (d *Dropdown) SetValue(value fmt.Stringer) {
+	for i, option := range d.options {
+		if option == value {
+			d.SelectItem(i)
+		}
+	}
+}
+
 type DropdownStyle struct {
 	TextSize       unit.Sp
 	MaxWidth       unit.Dp
@@ -158,7 +166,9 @@ func (d DropdownStyle) Open(modalLayer *ModalLayer) {
 }
 
 func (d *Dropdown) SelectItem(index int) {
-	d.currentModalLayer.CurrentModal = nil
+	if d.currentModalLayer != nil {
+		d.currentModalLayer.CurrentModal = nil
+	}
 	d.currentModalLayer = nil
 
 	d.valueIndex = index

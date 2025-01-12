@@ -586,9 +586,7 @@ func (ts TimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensions {
 			Y: float32(size.Y),
 		})
 
-		paint.FillShape(gtx.Ops, color.NRGBA{
-			R: 255, G: 255, B: 255, A: 20,
-		}, clip.Stroke{
+		paint.FillShape(gtx.Ops, utils.ChartLineColor, clip.Stroke{
 			Path:  line.End(),
 			Width: 2,
 		}.Op())
