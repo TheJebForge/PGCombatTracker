@@ -25,7 +25,16 @@
 3. Run the executable
 4. Optionally find Project Gorgon's `ChatLogs` folder if prompted
 
+
 ## How To Use
+
+### VIP subscription for Project Gorgon is required for ChatLogs to contain Combat lines
+Enable `Save Chat Logs` in the game as shown on the screenshot:
+![image](https://github.com/user-attachments/assets/cc088f70-03bc-4c1c-b630-3c5fa9bbfa20)
+Set your `Combat Logging` as shown:
+![image](https://github.com/user-attachments/assets/6c79ce86-acd5-40cd-b382-6fe5ff9c5d16)
+You can disable things you don't want to see in the software, if you want
+
 ### File Selection Screen
 ![img_6.png](github_images/img_6.png)
 1. Refreshes the file list
