@@ -9,7 +9,7 @@
 - **Tracks all the enemies and enemy types that damaged you**
 - **Tracks all the times you or your enemies heal**
 - **Tracks your XP gains**
-- **Tracks misc stats that don't any other tab**
+- **Tracks misc stats that don't fit on any other tab**
 - **Tracks data for pets and summonable entities too!**
 - **Pie charts!**
 - **Area graphs!**
