@@ -6,6 +6,7 @@ type Settings struct {
 	SecondsUntilDPSReset    int
 	RemoveLevelsFromSkills  bool
 	EntitiesThatCountAsPets []string
+	ProjectGorgonFolder     string
 }
 
 func NewSettings() *Settings {

@@ -10,6 +10,8 @@ import (
 	"github.com/samber/lo"
 	"image/color"
 	"log"
+	"os"
+	"path"
 	"slices"
 	"time"
 )
@@ -29,10 +31,31 @@ type GlobalState struct {
 }
 
 func NewGlobalState(window *app.Window, factory abstract.StatisticsFactory) (abstract.GlobalState, error) {
-	gorgonFolder, err := parser.GetGorgonFolder()
+	sett := abstract.NewSettings()
+	if err := LoadSettings(sett); err != nil {
+		log.Printf("Failed to load %v, continuing from defaults. Reason: %v\n", SettingsLocation, err)
+	}
+
+	homeDir, err := os.UserHomeDir()
 
 	if err != nil {
 		return nil, err
+	}
+
+	gorgonFolder, err := parser.GetGorgonFolder([]string{
+		sett.ProjectGorgonFolder,
+		path.Join(homeDir, "AppData", "LocalLow", "Elder Game", "Project Gorgon", "ChatLogs"),
+		path.Join(homeDir, ".config", "unity3d", "Elder Game", "Project Gorgon", "ChatLogs"),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	sett.ProjectGorgonFolder = gorgonFolder
+	err = SaveSettings(sett)
+	if err != nil {
+		log.Printf("Failed to save %v: %v\n", SettingsLocation, err)
 	}
 
 	theme := material.NewTheme()
@@ -40,11 +63,6 @@ func NewGlobalState(window *app.Window, factory abstract.StatisticsFactory) (abs
 	theme.Bg = utils.BG
 	theme.Fg = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 	theme.ContrastBg = color.NRGBA{R: 100, G: 100, B: 100, A: 255}
-
-	sett := abstract.NewSettings()
-	if err := LoadSettings(sett); err != nil {
-		log.Printf("Failed to load %v, continuing from defaults. Reason: %v\n", SettingsLocation, err)
-	}
 
 	markers := abstract.NewMarkers()
 	if err := LoadMarkersFile(markers); err != nil {

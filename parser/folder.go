@@ -21,26 +21,20 @@ func Exists(path string) (bool, error) {
 	return false, err
 }
 
-func GetGorgonFolder() (string, error) {
-	homeDir, err := os.UserHomeDir()
+func GetGorgonFolder(possiblePaths []string) (string, error) {
+	for _, possiblePath := range possiblePaths {
+		if ok, err := Exists(possiblePath); ok && err == nil {
+			return possiblePath, nil
+		}
+	}
+
+	dir, err := dialog.Directory().Title("Project Gorgon Chat Logs Folder").Browse()
 
 	if err != nil {
 		return "", err
 	}
 
-	gorgonFolder := path.Join(homeDir, "AppData", "LocalLow", "Elder Game", "Project Gorgon", "ChatLogs")
-
-	if ok, err := Exists(gorgonFolder); !ok || err != nil {
-		dir, err := dialog.Directory().Title("Project Gorgon Chat Logs Folder").Browse()
-
-		if err != nil {
-			return "", err
-		}
-
-		gorgonFolder = dir
-	}
-
-	return gorgonFolder, nil
+	return dir, nil
 }
 
 func GetSortedLogFiles(p string) ([]os.FileInfo, error) {
