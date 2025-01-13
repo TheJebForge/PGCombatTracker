@@ -2,7 +2,7 @@
 #### Sophisticated Project Gorgon combat log tracker for all your statistical needs!
 
 ## Screenshots
-| <img src="github_images/img.png" width="300"> | <img src="github_images/img_1.png" width="300"> | <img src="github_images/img_2.png" width="300"> | <img src="github_images/img_3.png" width="300"> | <img src="github_images/img_4.png" width="300"> | <img src="github_images/img_5.png" width="300"> |
+<img src="github_images/img.png" width="300"> <img src="github_images/img_1.png" width="300"> <img src="github_images/img_2.png" width="300"> <img src="github_images/img_3.png" width="300"> <img src="github_images/img_4.png" width="300"> <img src="github_images/img_5.png" width="300">
 
 ## Features
 - **Tracks all the skills you use and damage dealt**
