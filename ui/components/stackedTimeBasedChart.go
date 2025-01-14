@@ -448,7 +448,13 @@ func (sts StackedTimeBasedChartStyle) tooltip(point StackedBreakdown) layout.Wid
 										}.Layout(
 											gtx,
 											layout.Rigid(material.Label(sts.theme, sts.TooltipTextSize, item.Name).Layout),
-											layout.Rigid(material.Label(sts.theme, sts.TooltipTextSize, item.Details.StringCL(sts.LongFormat)).Layout),
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												if item.Details != nil {
+													return material.Label(sts.theme, sts.TooltipTextSize, item.Details.StringCL(sts.LongFormat)).Layout(gtx)
+												}
+
+												return layout.Dimensions{}
+											}),
 										)
 									}),
 								)
@@ -507,14 +513,21 @@ func (sts StackedTimeBasedChartStyle) legend(
 				}),
 				utils.FlexSpacerW(utils.CommonSpacing),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					sub := material.Label(sts.theme, sts.TextSize, item.Details.StringCL(sts.LongFormat))
-					sub.Color = sts.SubTextColor
+
 					return layout.Flex{
 						Axis: layout.Vertical,
 					}.Layout(
 						gtx,
 						layout.Rigid(material.Label(sts.theme, sts.TextSize, item.Name).Layout),
-						layout.Rigid(sub.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if item.Details != nil {
+								sub := material.Label(sts.theme, sts.TextSize, item.Details.StringCL(sts.LongFormat))
+								sub.Color = sts.SubTextColor
+								return sub.Layout(gtx)
+							}
+
+							return layout.Dimensions{}
+						}),
 					)
 				}),
 			)

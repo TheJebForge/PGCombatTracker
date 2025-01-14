@@ -8,6 +8,7 @@ import (
 	"gioui.org/layout"
 	"github.com/fogleman/gg"
 	"image/color"
+	"math"
 	"time"
 )
 
@@ -130,7 +131,10 @@ func exportUniversalBar(
 		styledFonts,
 		sideText,
 		func(ltx drawing.Context) drawing.Result {
-			var progress = float64(value) / float64(max)
+			progress := float64(value) / float64(max)
+			if math.IsNaN(progress) {
+				progress = 1
+			}
 
 			return percentBar(progress, components.StringToColor(name))(ltx)
 		}, amount,

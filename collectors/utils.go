@@ -123,6 +123,9 @@ func drawUniversalBar(
 		sideText,
 		func(gtx layout.Context) layout.Dimensions {
 			var progress = float64(value) / float64(max)
+			if math.IsNaN(progress) {
+				progress = 1
+			}
 
 			return components.BarWidget(components.StringToColor(name), size, progress)(gtx)
 		}, amount,
