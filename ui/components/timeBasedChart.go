@@ -493,7 +493,13 @@ func (ts TimeBasedChartStyle) tooltip(point TimePoint) layout.Widget {
 						}.Layout(
 							gtx,
 							layout.Rigid(material.Label(ts.theme, ts.TooltipTextSize, point.Time.Format(time.DateTime)).Layout),
-							layout.Rigid(material.Label(ts.theme, ts.TooltipTextSize, point.Details.StringCL(ts.LongFormat)).Layout),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								if point.Details != nil {
+									return material.Label(ts.theme, ts.TooltipTextSize, point.Details.StringCL(ts.LongFormat)).Layout(gtx)
+								}
+
+								return layout.Dimensions{}
+							}),
 						)
 					},
 				)
