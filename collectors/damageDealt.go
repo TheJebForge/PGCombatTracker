@@ -247,9 +247,47 @@ func (d *DamageDealtCollector) ingestSkillDamage(info abstract.StatisticsInforma
 	))
 }
 
-func (d *DamageDealtCollector) ingestIndirect(event *abstract.ChatEvent) {
+func (d *DamageDealtCollector) ingestIndirect(info abstract.StatisticsInformation, event *abstract.ChatEvent) {
 	indirect := event.Contents.(*abstract.IndirectDamage)
-	d.total.indirectDamage = d.total.indirectDamage.Add(indirect.Damage.Abs())
+	absedDamage := indirect.Damage.Abs()
+
+	d.total.indirectDamage = d.total.indirectDamage.Add(absedDamage)
+
+	d.subjects = utils.CreateUpdate(
+		d.subjects,
+		func(subject subjectiveDamageDealt) bool {
+			return subject.subject == info.CurrentUsername()
+		},
+		func() subjectiveDamageDealt {
+			totalChart, err := components.NewTimeController(components.NewTimeBasedChart("Total"))
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			dpsChart, err := components.NewTimeController(components.NewTimeBasedChart("Total DPS"))
+			if err != nil {
+				log.Fatalln(err)
+			}
+			dpsCalculator := NewDPSCalculatorForController(dpsChart, info.Settings())
+
+			subject := subjectiveDamageDealt{
+				subject:           info.CurrentUsername(),
+				indirectDamage:    absedDamage,
+				totalChart:        totalChart,
+				stackedTotalChart: components.NewStackedTimeBasedChart(),
+				dpsChart:          dpsChart,
+				stackedDpsChart:   components.NewStackedTimeBasedChart(),
+				dpsCalculator:     dpsCalculator,
+			}
+
+			return subject
+		},
+		func(subject subjectiveDamageDealt) subjectiveDamageDealt {
+			subject.indirectDamage = subject.indirectDamage.Add(absedDamage)
+
+			return subject
+		},
+	)
 }
 
 func (d *DamageDealtCollector) Reset(info abstract.StatisticsInformation) {
@@ -307,7 +345,7 @@ func (d *DamageDealtCollector) Collect(info abstract.StatisticsInformation, even
 	}
 
 	if indirect, ok := event.Contents.(*abstract.IndirectDamage); ok && !isSubjectValuable(info, indirect.Subject, "") {
-		d.ingestIndirect(event)
+		d.ingestIndirect(info, event)
 	}
 
 	return nil
