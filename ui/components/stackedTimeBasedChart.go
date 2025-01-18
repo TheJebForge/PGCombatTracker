@@ -2,6 +2,7 @@ package components
 
 import (
 	"PGCombatTracker/utils"
+	"fmt"
 	"gioui.org/f32"
 	"gioui.org/io/event"
 	"gioui.org/io/pointer"
@@ -625,6 +626,13 @@ func (sts StackedTimeBasedChartStyle) Layout(gtx layout.Context) layout.Dimensio
 
 		previousLine = line
 	}
+
+	maxLabelTrans := op.Offset(image.Point{
+		X: spacing,
+		Y: spacing,
+	}).Push(gtx.Ops)
+	material.Label(sts.theme, sts.TextSize, fmt.Sprintf("Max: %d", sts.chart.DisplayValueRange.Max)).Layout(cgtx)
+	maxLabelTrans.Pop()
 
 	if sts.chart.hoveredPoint != nil {
 		hoverPosition := sts.chart.hoverPosition
