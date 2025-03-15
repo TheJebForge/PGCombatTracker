@@ -41,6 +41,8 @@ type StatisticsPage struct {
 	copyButton        *widget.Clickable
 	collectorDropdown *components.Dropdown
 	collectorBody     *widget.List
+	windowedButton    *widget.Clickable
+	windowedIcon      *widget.Icon
 }
 
 type CollectorPageIndex struct {
@@ -97,6 +99,12 @@ func NewStatisticsPage(state abstract.GlobalState, filePath string) (*Statistics
 		return nil, err
 	}
 
+	windowedIcon, err := widget.NewIcon(icons.ActionFlipToFront)
+
+	if err != nil {
+		return nil, err
+	}
+
 	collectorDropdown, err := components.NewDropdown("Page", CollectorPageIndex{})
 
 	if err != nil {
@@ -132,6 +140,8 @@ func NewStatisticsPage(state abstract.GlobalState, filePath string) (*Statistics
 		copyButton:        &widget.Clickable{},
 		collectorDropdown: collectorDropdown,
 		collectorBody:     getFreshCollectorBody(),
+		windowedButton:    &widget.Clickable{},
+		windowedIcon:      windowedIcon,
 	}, nil
 }
 
@@ -149,7 +159,7 @@ func navIconButton(state abstract.GlobalState, button *widget.Clickable, icon *w
 	return style
 }
 
-func windowDragArea(draggable bool) layout.Widget {
+func (s *StatisticsPage) windowDragArea(state abstract.LayeredState) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		width := gtx.Dp(60)
 		size := image.Point{
@@ -159,7 +169,7 @@ func windowDragArea(draggable bool) layout.Widget {
 
 		defer clip.UniformRRect(image.Rectangle{Max: size}, 5).Push(gtx.Ops).Pop()
 
-		if draggable {
+		if state.CanBeDragged() {
 			system.ActionInputOp(system.ActionMove).Add(gtx.Ops)
 		}
 
@@ -195,6 +205,10 @@ func (s *StatisticsPage) navBar(state abstract.LayeredState) layout.Widget {
 			state.SetWindowDrag(!state.CanBeDragged())
 		}
 
+		if s.windowedButton.Clicked(gtx) {
+			state.Window().Option(app.Windowed.Option())
+		}
+
 		return layout.Background{}.Layout(
 			gtx,
 			utils.MakeColoredAndOptionalDragBG(utils.SecondBG, state.CanBeDragged()),
@@ -227,12 +241,13 @@ func (s *StatisticsPage) navBar(state abstract.LayeredState) layout.Widget {
 							return style.Layout(gtx)
 						}),
 						utils.FlexSpacerW(utils.CommonSpacing),
+						layout.Rigid(navIconButton(state, s.windowedButton, s.windowedIcon, "Windowed").Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Stack{
 								Alignment: layout.Center,
 							}.Layout(
 								gtx,
-								layout.Expanded(windowDragArea(state.CanBeDragged())),
+								layout.Expanded(s.windowDragArea(state)),
 								layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 									if !state.CanBeDragged() {
 										return material.Label(state.Theme(), 12, "Locked").Layout(gtx)
@@ -373,7 +388,7 @@ func (s *StatisticsPage) Layout(ctx layout.Context, state abstract.GlobalState) 
 func (s *StatisticsPage) SetupWindow(state abstract.GlobalState) {
 	state.Window().Option(
 		app.Decorated(false),
-		app.MinSize(380, 350),
-		app.Size(380, 350),
+		app.MinSize(400, 350),
+		app.Size(400, 350),
 	)
 }
