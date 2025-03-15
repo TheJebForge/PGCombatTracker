@@ -80,7 +80,7 @@ You can disable things you don't want to see in the software, if you want
 4. Copies current tab's contents with current settings into clipboard
    - You can use that to quickly share your statistics with other people on Discord for example
 5. Tab selection dropdown, you can use it to go to other statistics collected by the software
-6. Windowed mode button, allows you get out of maximized mode if you double click the grab area
+6. Windowed mode button, allows you to get out of maximized mode if you double click the grab area
 7. Window grab area (works on Windows only), you can use it to move the window around
 8. Window grab lock (also Windows only), it disables previously mentioned grab area, so you can't accidentally move the window
 9. Current tab's contents, displays all the statistics found on current tab
